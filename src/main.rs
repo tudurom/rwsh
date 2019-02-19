@@ -1,7 +1,6 @@
 use std::error::Error;
 use std::io::{stdin, stdout, Write};
 use std::process::Command;
-use std::str::CharIndices;
 
 fn main() -> Result<(), Box<dyn Error>> {
     loop {
@@ -9,7 +8,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         stdout().flush()?;
         let mut line = String::new();
         stdin().read_line(&mut line).unwrap();
-        let mut parts = Args::new(line.trim());
+        let mut _parts = parse_line(line.trim());
+        let mut parts = _parts.iter().map(|x| &x[..]);
         let command = parts.next().unwrap();
         let args = parts;
         run_command(command, args).unwrap();
@@ -25,71 +25,61 @@ where
     Ok(())
 }
 
-pub struct Args<'a> {
-    base: &'a str,
-    it: CharIndices<'a>,
-}
-
-impl<'a> Args<'a> {
-    pub fn new(base: &'a str) -> Args<'a> {
-        Args {
-            base,
-            it: base.char_indices(),
-        }
+fn escape(c: char) -> char {
+    match c {
+        'n' => '\n',
+        't' => '\t',
+        'a' => '\x07',
+        'b' => '\x08',
+        _ => c,
     }
 }
 
-impl<'a> Iterator for Args<'a> {
-    type Item = &'a str;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut l: i32 = -1;
-        let mut r: i32 = -2;
-        let mut in_quote = '\0';
-        let mut escaping = false;
-        while let Some((i, c)) = self.it.next() {
+fn parse_line(base: &str) -> Vec<String> {
+    let mut in_quote = '\0';
+    let mut escaping = false;
+    let mut v: Vec<String> = Vec::new();
+    let mut s = String::new();
+    let mut it = base.chars();
+    loop {
+        s.clear();
+        while let Some(c) = it.next() {
             if in_quote == '\0' && (c == '\'' || c == '"') {
                 in_quote = c;
                 continue;
             }
-            if !escaping && c.is_whitespace() {
-                if r < l {
+            if !escaping && in_quote == '\0' && c.is_whitespace() {
+                if s.is_empty() {
                     continue;
                 }
                 break;
             }
-            if l == -1 {
-                l = i as i32;
-                r = l - 1;
-            }
             if in_quote != '\0' {
                 if escaping {
-                    r += 1;
+                    s.push(escape(c));
                     escaping = false;
                 } else if c != in_quote {
                     if c == '\\' {
                         escaping = true;
                     } else {
-                        r += 1;
+                        s.push(c);
                     }
                 } else {
                     in_quote = '\0';
-                    break;
                 }
+            } else if escaping {
+                s.push(escape(c));
+                escaping = false;
+            } else if c == '\\' {
+                escaping = true;
             } else {
-                if escaping {
-                    r += 1;
-                    escaping = false;
-                } else if c == '\\' {
-                    escaping = true;
-                } else {
-                    r += 1;
-                }
+                s.push(c);
             }
         }
-        if in_quote != '\0' || escaping || r < l {
-            return None;
+        if in_quote != '\0' || escaping || s.is_empty() {
+            break;
         }
-        Some(&self.base[l as usize..=r as usize])
+        v.push(s.clone());
     }
+    v
 }
