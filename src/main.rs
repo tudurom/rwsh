@@ -1,22 +1,34 @@
-use std::error::Error;
-use std::io::{stdin, stdout, Write};
-use std::process::Command;
+use std::io::{self, stdin, stdout, Write};
+use std::process::{exit, Command};
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() {
     loop {
         print!("> ");
-        stdout().flush()?;
+        stdout().flush().unwrap();
         let mut line = String::new();
-        stdin().read_line(&mut line).unwrap();
+        if stdin().read_line(&mut line).unwrap() == 0 {
+            exit(0);
+        }
         let mut _parts = parse_line(line.trim());
         let mut parts = _parts.iter().map(|x| &x[..]);
-        let command = parts.next().unwrap();
+        let command = parts.next();
+        if command.is_none() {
+            continue;
+        }
         let args = parts;
-        run_command(command, args).unwrap();
+        match run_command(command.unwrap(), args) {
+            Err(ref error) if error.kind() == io::ErrorKind::NotFound => {
+                eprintln!("Command not found");
+            }
+            Err(error) => {
+                panic!(error);
+            }
+            _ => {}
+        }
     }
 }
 
-fn run_command<'a, I>(command: &str, args: I) -> Result<(), Box<dyn Error>>
+fn run_command<'a, I>(command: &str, args: I) -> io::Result<()>
 where
     I: Iterator<Item = &'a str>,
 {
