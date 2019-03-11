@@ -1,4 +1,5 @@
 use crate::parser::parse_line;
+use crate::parser::lex;
 use dirs;
 use std::env;
 use std::io::{stdin, stdout, Write};
@@ -21,7 +22,9 @@ impl Shell {
             if stdin().read_line(&mut line).unwrap() == 0 {
                 exit(0);
             }
-            let mut _parts = parse_line(line.trim());
+            let clone = String::from(line.trim());
+            let line = clone.clone();
+            let mut _parts = parse_line(&line);
             let mut parts = _parts.iter().map(|x| &x[..]);
             let command = parts.next();
             if command.is_none() {
@@ -31,20 +34,24 @@ impl Shell {
             if let Err(error) = self.run_command(command.unwrap(), args) {
                 eprintln!("{}", error);
             }
+            println!("lex {:?}", lex::lex(&clone));
         }
     }
     fn do_cd<'a, I>(&self, mut args: I) -> Result<(), String>
     where
         I: Iterator<Item = &'a str>,
     {
+        let dir: &str;
+        let home = dirs::home_dir().unwrap();
         if let Some(arg) = args.next() {
-            let path = expand_home(Path::new(arg));
-            match env::set_current_dir(path) {
-                Err(error) => Err(format!("cd: {}", error)),
-                _ => Ok(()),
-            }
+            dir = arg;
         } else {
-            Err(String::from("cd needs an argument"))
+            dir = home.to_str().unwrap();
+        }
+        let path = expand_home(dir);
+        match env::set_current_dir(path) {
+            Err(error) => Err(format!("cd: {}", error)),
+            _ => Ok(()),
         }
     }
     fn run_command<'a, I>(&self, command: &str, args: I) -> Result<(), String>

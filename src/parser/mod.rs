@@ -1,3 +1,5 @@
+pub mod lex;
+
 pub fn parse_line(base: &str) -> Vec<String> {
     let mut in_quote = '\0';
     let mut escaping = false;
