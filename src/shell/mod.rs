@@ -1,5 +1,4 @@
 use crate::parser::parse_line;
-use crate::parser::lex;
 use dirs;
 use std::env;
 use std::io::{stdin, stdout, Write};
@@ -34,7 +33,6 @@ impl Shell {
             if let Err(error) = self.run_command(command.unwrap(), args) {
                 eprintln!("{}", error);
             }
-            println!("lex {:?}", lex::lex(&clone));
         }
     }
     fn do_cd<'a, I>(&self, mut args: I) -> Result<(), String>
