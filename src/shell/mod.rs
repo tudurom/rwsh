@@ -1,47 +1,35 @@
-use crate::util::{InteractiveLineReader,BufReadChars};
-use crate::parser::parse_line;
+use crate::parser::lex::Lexer;
+use crate::parser::{ParseNode, Parser};
+use crate::util::{BufReadChars, InteractiveLineReader};
 use dirs;
 use std::env;
-use std::io::{stdin, stdout, Write};
 use std::path::{Path, PathBuf};
-use std::process::{exit, Command};
+use std::process::Command;
 
 pub struct Shell {
-    line_reader: BufReadChars,
+    p: Parser,
 }
 
 impl Shell {
     pub fn new() -> Shell {
         let ilr = InteractiveLineReader::new();
-        let line_reader = BufReadChars::new(Box::new(ilr));
-        Shell {
-            line_reader,
-        }
+        let r = BufReadChars::new(Box::new(ilr));
+        let l = Lexer::new(r);
+        let p = Parser::new(l);
+        Shell { p }
     }
 
-    pub fn run(&self) {
-        loop {
-            print!("> ");
-            stdout().flush().unwrap();
-            let mut line = String::new();
-            if stdin().read_line(&mut line).unwrap() == 0 {
-                exit(0);
-            }
-            let clone = String::from(line.trim());
-            let line = clone.clone();
-            let mut _parts = parse_line(&line);
-            let mut parts = _parts.iter().map(|x| &x[..]);
-            let command = parts.next();
-            if command.is_none() {
-                continue;
-            }
-            let args = parts;
-            if let Err(error) = self.run_command(command.unwrap(), args) {
-                eprintln!("{}", error);
+    pub fn run(&mut self) {
+        for t in self.p.by_ref() {
+            if let Ok(ParseNode::Command(c)) = t {
+                let parts = c.1.iter().map(|x| &x[..]);
+                if let Err(error) = Shell::run_command(&c.0, parts) {
+                    eprintln!("{}", error);
+                }
             }
         }
     }
-    fn do_cd<'a, I>(&self, mut args: I) -> Result<(), String>
+    fn do_cd<'a, I>(mut args: I) -> Result<(), String>
     where
         I: Iterator<Item = &'a str>,
     {
@@ -58,12 +46,12 @@ impl Shell {
             _ => Ok(()),
         }
     }
-    fn run_command<'a, I>(&self, command: &str, args: I) -> Result<(), String>
+    fn run_command<'a, I>(command: &str, args: I) -> Result<(), String>
     where
         I: Iterator<Item = &'a str>,
     {
         match command {
-            "cd" => self.do_cd(args),
+            "cd" => Shell::do_cd(args),
             _ => match Command::new(command).args(args).spawn() {
                 Ok(mut child) => {
                     if let Err(error) = child.wait() {
@@ -74,6 +62,12 @@ impl Shell {
                 Err(error) => Err(format!("rwsh: {}", error)),
             },
         }
+    }
+}
+
+impl Default for Shell {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

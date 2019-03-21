@@ -8,11 +8,11 @@ pub enum Token {
     WordString(char, String),
 }
 
-pub struct Lexer<I: Iterator<Item=char>> {
+pub struct Lexer<I: Iterator<Item = char>> {
     input: Peekable<I>,
 }
 
-impl<I: Iterator<Item=char>> Lexer<I> {
+impl<I: Iterator<Item = char>> Lexer<I> {
     pub fn new(input: I) -> Lexer<I> {
         Lexer {
             input: input.peekable(),
@@ -20,7 +20,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
     }
 }
 
-impl<I: Iterator<Item=char>> Iterator for Lexer<I> {
+impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
     type Item = Result<Token, String>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -65,7 +65,7 @@ fn skip_whitespace<I: Iterator<Item = char>>(it: &mut Peekable<I>) {
 
 fn is_clear_string_char(c: char) -> bool {
     match c {
-        'a'...'z' | 'A'...'Z' | '-' | '_' | '\\' => true,
+        'a'...'z' | 'A'...'Z' | '-' | '_' | '\\' | '.' => true,
         _ => false,
     }
 }

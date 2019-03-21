@@ -1,11 +1,11 @@
-use std::io::{BufRead, Write, stdin, stdout, self};
+use std::io::{self, stdin, stdout, Write};
 use std::iter::Iterator;
-use std::str::Chars;
 
 pub trait LineReader {
     fn read_line(&mut self) -> io::Result<Option<String>>;
 }
 
+#[derive(Default)]
 pub struct InteractiveLineReader(String);
 
 impl InteractiveLineReader {
@@ -20,14 +20,12 @@ impl LineReader for InteractiveLineReader {
         stdout().flush().unwrap();
         self.0.clear();
         let mut s = String::new();
-        let r = match stdin().read_line(&mut s) {
+
+        match stdin().read_line(&mut s) {
             Err(e) => Err(e),
             Ok(0) => Ok(None),
-            Ok(_) => Ok(Some(s))
-        };
-        println!("");
-        
-        r
+            Ok(_) => Ok(Some(s)),
+        }
     }
 }
 
@@ -56,7 +54,7 @@ impl BufReadChars {
                 self.chars = line.chars().collect();
                 self.i = 0;
                 self.initialized = true;
-            },
+            }
             None => self.finished = true,
         }
     }
@@ -85,8 +83,9 @@ impl Iterator for BufReadChars {
             Some(c) => Some(c),
             None => {
                 self.refresh();
-                return self.next();
-            },
+
+                self.next()
+            }
         }
     }
 }
