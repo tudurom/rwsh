@@ -4,7 +4,7 @@ use crate::util::{BufReadChars, InteractiveLineReader};
 use dirs;
 use std::env;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{self, Command};
 
 pub struct Shell {
     p: Parser,
@@ -26,6 +26,9 @@ impl Shell {
                 if let Err(error) = Shell::run_command(&c.0, parts) {
                     eprintln!("{}", error);
                 }
+            } else if let Err(e) = t {
+                eprintln!("{}", e);
+                process::exit(1);
             }
         }
     }

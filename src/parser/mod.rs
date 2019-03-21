@@ -46,7 +46,9 @@ impl Parser {
                                 self.lexer.next();
                                 break;
                             }
-                            _ => {}
+                            _ => {
+                                return Some(Err(format!("unexpected token {:?} in command", tok)));
+                            }
                         },
                         Err(e) => {
                             return Some(Err(e.clone()));
@@ -59,8 +61,23 @@ impl Parser {
             None => None,
         }
     }
+    fn skip_space(&mut self) {
+        while let Some(Ok(tok)) = self.lexer.peek() {
+            match tok {
+                lex::Token::Space | lex::Token::Newline => {},
+                _ => break,
+            }
+            self.lexer.next();
+        }
+    }
     fn parse_word_list(&mut self) -> Option<Result<String, String>> {
         let mut r = String::new();
+        self.skip_space();
+        match self.lexer.peek() {
+            Some(Ok(lex::Token::WordString(_, _))) => {},
+            Some(Ok(tok)) => return Some(Err(format!("unexpected token {:?} in word list", tok))),
+            _ => {},
+        }
         while let Some(Ok(lex::Token::WordString(_, s))) = self.lexer.peek() {
             r.push_str(s);
             self.lexer.next();
