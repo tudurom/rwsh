@@ -1,6 +1,7 @@
 pub mod lex;
 
 use self::lex::Lexer;
+use crate::util::BufReadChars;
 use std::iter::Peekable;
 
 #[derive(Debug)]
@@ -12,13 +13,13 @@ pub enum ParseNode {
     Command(Command),
 }
 
-pub struct Parser<'a> {
-    lexer: Peekable<lex::Lexer<'a>>,
+pub struct Parser {
+    lexer: Peekable<Lexer<BufReadChars>>,
     error: Option<String>,
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(lexer: Lexer) -> Parser {
+impl Parser {
+    pub fn new(lexer: Lexer<BufReadChars>) -> Parser {
         Parser {
             lexer: lexer.peekable(),
             error: None,
@@ -72,7 +73,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-impl<'a> Iterator for Parser<'a> {
+impl Iterator for Parser {
     type Item = Result<ParseNode, String>;
 
     fn next(&mut self) -> Option<Self::Item> {

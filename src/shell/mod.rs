@@ -1,3 +1,4 @@
+use crate::util::{InteractiveLineReader,BufReadChars};
 use crate::parser::parse_line;
 use dirs;
 use std::env;
@@ -5,12 +6,17 @@ use std::io::{stdin, stdout, Write};
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
-#[derive(Default)]
-pub struct Shell;
+pub struct Shell {
+    line_reader: BufReadChars,
+}
 
 impl Shell {
     pub fn new() -> Shell {
-        Shell
+        let ilr = InteractiveLineReader::new();
+        let line_reader = BufReadChars::new(Box::new(ilr));
+        Shell {
+            line_reader,
+        }
     }
 
     pub fn run(&self) {

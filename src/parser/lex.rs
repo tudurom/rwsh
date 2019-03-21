@@ -1,5 +1,4 @@
 use std::iter::Peekable;
-use std::str::Chars;
 
 #[derive(Debug, Clone)]
 pub enum Token {
@@ -9,19 +8,19 @@ pub enum Token {
     WordString(char, String),
 }
 
-pub struct Lexer<'a> {
-    input: Peekable<Chars<'a>>,
+pub struct Lexer<I: Iterator<Item=char>> {
+    input: Peekable<I>,
 }
 
-impl<'a> Lexer<'a> {
-    pub fn new(input: &'a str) -> Lexer<'a> {
+impl<I: Iterator<Item=char>> Lexer<I> {
+    pub fn new(input: I) -> Lexer<I> {
         Lexer {
-            input: input.chars().peekable(),
+            input: input.peekable(),
         }
     }
 }
 
-impl<'a> Iterator for Lexer<'a> {
+impl<I: Iterator<Item=char>> Iterator for Lexer<I> {
     type Item = Result<Token, String>;
 
     fn next(&mut self) -> Option<Self::Item> {
