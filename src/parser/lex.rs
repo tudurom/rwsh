@@ -2,17 +2,27 @@ use std::iter::Peekable;
 
 #[derive(Debug, Clone)]
 pub enum Token {
+    /// One or more non-newline whitespace characters.
     Space,
+    /// The pipe (`|`) character.
     Pipe,
+    /// A newline.
     Newline,
+    /// A sequence of concatenated words.
+    /// 
+    /// The first tuple element is the quote type (`"` or `'`),
+    /// or `\0` if none.
     WordString(char, String),
 }
 
+/// Transforms text to a sequence of [`Token`s](enum.Token.html). 
 pub struct Lexer<I: Iterator<Item = char>> {
     input: Peekable<I>,
 }
 
 impl<I: Iterator<Item = char>> Lexer<I> {
+    /// Creates a new lexer based on a `char` iterator,
+    /// usually a [`BufReadChars`](../../util/struct.BufReadChars.html).
     pub fn new(input: I) -> Lexer<I> {
         Lexer {
             input: input.peekable(),

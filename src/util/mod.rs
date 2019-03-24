@@ -1,10 +1,12 @@
 use std::io::{self, stdin, stdout, Write};
 use std::iter::Iterator;
 
+/// An interface for reading lines of UTF-8 texts.
 pub trait LineReader {
     fn read_line(&mut self) -> io::Result<Option<String>>;
 }
 
+/// A [`LineReader`](trait.LineReader.html) that reads from `stdin` and prints a prompt.
 #[derive(Default)]
 pub struct InteractiveLineReader(String);
 
@@ -24,21 +26,27 @@ impl LineReader for InteractiveLineReader {
         match stdin().read_line(&mut s) {
             Err(e) => Err(e),
             Ok(0) => Ok(None),
-            Ok(_) => Ok(Some(s)),
+            Ok(_) => {
+                if s.chars().last().unwrap_or_default() != '\n' {
+                    s.push('\n');
+                }
+                Ok(Some(s))
+            }
         }
     }
 }
 
-pub struct BufReadChars {
-    r: Box<LineReader>,
+/// A char iterator for UTF-8 texts.
+pub struct BufReadChars<R: LineReader> {
+    r: R,
     chars: Vec<char>,
     finished: bool,
     i: usize,
     initialized: bool,
 }
 
-impl BufReadChars {
-    pub fn new(r: Box<LineReader>) -> BufReadChars {
+impl<R: LineReader> BufReadChars<R> {
+    pub fn new(r: R) -> BufReadChars<R> {
         BufReadChars {
             r,
             chars: Vec::new(),
@@ -69,7 +77,7 @@ impl BufReadChars {
     }
 }
 
-impl Iterator for BufReadChars {
+impl<R: LineReader> Iterator for BufReadChars<R> {
     type Item = char;
     fn next(&mut self) -> Option<Self::Item> {
         if self.finished {
@@ -87,5 +95,42 @@ impl Iterator for BufReadChars {
                 self.next()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+    use std::str::Lines;
+
+    struct DummyLineReader<'a>(Lines<'a>);
+
+    impl<'a> super::LineReader for DummyLineReader<'a> {
+        fn read_line(&mut self) -> io::Result<Option<String>> {
+            match self.0.next() {
+                Some(s) => {
+                    let mut s = String::from(s);
+                    s.push('\n');
+                    Ok(Some(s))
+                }
+                None => Ok(None),
+            }
+        }
+    }
+
+    #[test]
+    fn reads_correctly() {
+        let _correct = [
+            'a', 'b', '\n', 'c', 'd', '\n', 'e', 'f', '\n', 'g', 'h', '\n',
+        ];
+        let mut correct = _correct.iter();
+        let s = "ab\ncd\nef\ngh";
+        let dlr = DummyLineReader(s.lines());
+        let buf = super::BufReadChars::new(dlr);
+
+        for c in buf {
+            assert_eq!(c, *(correct.next().unwrap()));
+        }
+        assert_eq!(correct.next(), None);
     }
 }

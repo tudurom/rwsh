@@ -1,25 +1,29 @@
 pub mod lex;
 
 use self::lex::Lexer;
-use crate::util::BufReadChars;
+use crate::util::{BufReadChars, LineReader};
 use std::iter::Peekable;
 
+/// A command tuple is made of its name and its arguments.
 #[derive(Debug)]
 pub struct Command(pub String, pub Vec<String>);
 
+/// A ParseNode is a node of the AST.
 #[derive(Debug)]
 pub enum ParseNode {
-    WordList(Vec<String>),
+    /// A command invocation. Usually on its own line, or part of a pipe.
     Command(Command),
 }
 
-pub struct Parser {
-    lexer: Peekable<Lexer<BufReadChars>>,
+/// Parses the series of [`Token`s](./lex/enum.Token.html) to the AST ([`ParseNode`s](enum.ParseNode.html)).
+pub struct Parser<R: LineReader> {
+    lexer: Peekable<Lexer<BufReadChars<R>>>,
     error: Option<String>,
 }
 
-impl Parser {
-    pub fn new(lexer: Lexer<BufReadChars>) -> Parser {
+impl<R: LineReader> Parser<R> {
+    /// Creates a new parser from a [`Lexer`](./lex/struct.Lexer.html).
+    pub fn new(lexer: Lexer<BufReadChars<R>>) -> Parser<R> {
         Parser {
             lexer: lexer.peekable(),
             error: None,
@@ -64,7 +68,7 @@ impl Parser {
     fn skip_space(&mut self) {
         while let Some(Ok(tok)) = self.lexer.peek() {
             match tok {
-                lex::Token::Space | lex::Token::Newline => {},
+                lex::Token::Space | lex::Token::Newline => {}
                 _ => break,
             }
             self.lexer.next();
@@ -74,9 +78,9 @@ impl Parser {
         let mut r = String::new();
         self.skip_space();
         match self.lexer.peek() {
-            Some(Ok(lex::Token::WordString(_, _))) => {},
+            Some(Ok(lex::Token::WordString(_, _))) => {}
             Some(Ok(tok)) => return Some(Err(format!("unexpected token {:?} in word list", tok))),
-            _ => {},
+            _ => {}
         }
         while let Some(Ok(lex::Token::WordString(_, s))) = self.lexer.peek() {
             r.push_str(s);
@@ -92,7 +96,7 @@ impl Parser {
     }
 }
 
-impl Iterator for Parser {
+impl<R: LineReader> Iterator for Parser<R> {
     type Item = Result<ParseNode, String>;
 
     fn next(&mut self) -> Option<Self::Item> {

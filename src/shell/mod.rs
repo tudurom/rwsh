@@ -1,29 +1,40 @@
 use crate::parser::lex::Lexer;
 use crate::parser::{ParseNode, Parser};
-use crate::util::{BufReadChars, InteractiveLineReader};
+use crate::util::{BufReadChars, LineReader, InteractiveLineReader};
 use dirs;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
 
-pub struct Shell {
-    p: Parser,
+/// The shell engine with its internal state.
+/// 
+/// Use it with an [`InteractiveLineReader`](../util/struct.InteractiveLineReader.html) to get an interactive shell.
+pub struct Shell<R: LineReader> {
+    p: Parser<R>,
 }
 
-impl Shell {
-    pub fn new() -> Shell {
-        let ilr = InteractiveLineReader::new();
-        let r = BufReadChars::new(Box::new(ilr));
-        let l = Lexer::new(r);
+impl Shell<InteractiveLineReader> {
+    /// Create a new `Shell` with an [`InteractiveLineReader`](../util/struct.InteractiveLineReader.html).
+    pub fn new_interactive() -> Shell<InteractiveLineReader> {
+        Shell::<InteractiveLineReader>::new(InteractiveLineReader::new())
+    }
+}
+
+impl<R: LineReader> Shell<R> {
+    /// Returns a new `Shell` with the given [`LineReader`](../util/trait.LineReader.html).
+    pub fn new(r: R) -> Shell<R> {
+        let buf = BufReadChars::new(r);
+        let l = Lexer::new(buf);
         let p = Parser::new(l);
         Shell { p }
     }
 
+    /// Start the REPL.
     pub fn run(&mut self) {
         for t in self.p.by_ref() {
             if let Ok(ParseNode::Command(c)) = t {
                 let parts = c.1.iter().map(|x| &x[..]);
-                if let Err(error) = Shell::run_command(&c.0, parts) {
+                if let Err(error) = Shell::<R>::run_command(&c.0, parts) {
                     eprintln!("{}", error);
                 }
             } else if let Err(e) = t {
@@ -32,6 +43,7 @@ impl Shell {
             }
         }
     }
+    
     fn do_cd<'a, I>(mut args: I) -> Result<(), String>
     where
         I: Iterator<Item = &'a str>,
@@ -49,12 +61,13 @@ impl Shell {
             _ => Ok(()),
         }
     }
+
     fn run_command<'a, I>(command: &str, args: I) -> Result<(), String>
     where
         I: Iterator<Item = &'a str>,
     {
         match command {
-            "cd" => Shell::do_cd(args),
+            "cd" => Shell::<R>::do_cd(args),
             _ => match Command::new(command).args(args).spawn() {
                 Ok(mut child) => {
                     if let Err(error) = child.wait() {
@@ -68,12 +81,13 @@ impl Shell {
     }
 }
 
-impl Default for Shell {
+impl Default for Shell<InteractiveLineReader> {
     fn default() -> Self {
-        Self::new()
+        Self::new_interactive()
     }
 }
 
+/// Expands the ~ at the beginning of a path to the user's home directory.
 fn expand_home<P: AsRef<Path>>(path: P) -> PathBuf {
     let mut new_path = PathBuf::new();
     let mut it = path.as_ref().iter().peekable();
