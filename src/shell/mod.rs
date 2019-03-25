@@ -1,13 +1,13 @@
 use crate::parser::lex::Lexer;
 use crate::parser::{ParseNode, Parser};
-use crate::util::{BufReadChars, LineReader, InteractiveLineReader};
+use crate::util::{BufReadChars, InteractiveLineReader, LineReader};
 use dirs;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
 
 /// The shell engine with its internal state.
-/// 
+///
 /// Use it with an [`InteractiveLineReader`](../util/struct.InteractiveLineReader.html) to get an interactive shell.
 pub struct Shell<R: LineReader> {
     p: Parser<R>,
@@ -43,7 +43,7 @@ impl<R: LineReader> Shell<R> {
             }
         }
     }
-    
+
     fn do_cd<'a, I>(mut args: I) -> Result<(), String>
     where
         I: Iterator<Item = &'a str>,

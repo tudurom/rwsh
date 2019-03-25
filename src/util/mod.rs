@@ -99,38 +99,18 @@ impl<R: LineReader> Iterator for BufReadChars<R> {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::io;
-    use std::str::Lines;
-
-    struct DummyLineReader<'a>(Lines<'a>);
-
-    impl<'a> super::LineReader for DummyLineReader<'a> {
-        fn read_line(&mut self) -> io::Result<Option<String>> {
-            match self.0.next() {
-                Some(s) => {
-                    let mut s = String::from(s);
-                    s.push('\n');
-                    Ok(Some(s))
-                }
-                None => Ok(None),
-            }
-        }
-    }
+pub mod tests {
+    use crate::tests::common::DummyLineReader;
 
     #[test]
     fn reads_correctly() {
-        let _correct = [
+        let correct = [
             'a', 'b', '\n', 'c', 'd', '\n', 'e', 'f', '\n', 'g', 'h', '\n',
         ];
-        let mut correct = _correct.iter();
         let s = "ab\ncd\nef\ngh";
         let dlr = DummyLineReader(s.lines());
         let buf = super::BufReadChars::new(dlr);
 
-        for c in buf {
-            assert_eq!(c, *(correct.next().unwrap()));
-        }
-        assert_eq!(correct.next(), None);
+        assert_eq!(buf.collect::<Vec<char>>(), correct);
     }
 }

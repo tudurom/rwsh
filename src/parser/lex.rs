@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     /// One or more non-newline whitespace characters.
     Space,
@@ -9,13 +9,13 @@ pub enum Token {
     /// A newline.
     Newline,
     /// A sequence of concatenated words.
-    /// 
+    ///
     /// The first tuple element is the quote type (`"` or `'`),
     /// or `\0` if none.
     WordString(char, String),
 }
 
-/// Transforms text to a sequence of [`Token`s](enum.Token.html). 
+/// Transforms text to a sequence of [`Token`s](enum.Token.html).
 pub struct Lexer<I: Iterator<Item = char>> {
     input: Peekable<I>,
 }
@@ -73,11 +73,12 @@ fn skip_whitespace<I: Iterator<Item = char>>(it: &mut Peekable<I>) {
     }
 }
 
+fn is_special_char(c: char) -> bool {
+    c == '|' || c == '\'' || c == '\"' || c == '&'
+}
+
 fn is_clear_string_char(c: char) -> bool {
-    match c {
-        'a'...'z' | 'A'...'Z' | '-' | '_' | '\\' | '.' => true,
-        _ => false,
-    }
+    !(c.is_control() || c.is_whitespace() || is_special_char(c))
 }
 
 fn read_string<I: Iterator<Item = char>>(
@@ -130,4 +131,118 @@ fn read_string<I: Iterator<Item = char>>(
     } else {
         Ok(s)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::tests::common::{new_dummy_buf, DummyLineReader};
+    use crate::util::BufReadChars;
+
+    #[test]
+    fn read_string_no_quotes() {
+        let s = "hell_o nice \\-meme😀 test";
+        let _result = ["hell_o", "nice", "-meme😀", "test"];
+        let mut result = _result.iter().peekable();
+        let mut buf = BufReadChars::new(DummyLineReader(s.lines())).peekable();
+        loop {
+            let x = super::read_string('\0', &mut buf).unwrap();
+            let correct = result.next();
+            if correct.is_none() && x != "" {
+                panic!("still getting results: {:?}", x);
+            } else if x == "" {
+                break;
+            }
+            assert_eq!(x, *(correct.unwrap()));
+            buf.next();
+        }
+        assert_eq!(result.peek(), None);
+    }
+
+    #[test]
+    fn read_string_quotes() {
+        for q in ['\'', '\"'].iter() {
+            let s = format!("{0}hell_o{0} {0}nice \\-meme😀 test\\ny{0}", q);
+            let _result = ["hell_o", "nice -meme😀 test\ny"];
+            let mut result = _result.iter().peekable();
+            let mut buf = new_dummy_buf(s.lines()).peekable();
+            loop {
+                buf.next();
+                if buf.peek().is_none() {
+                    break;
+                }
+                let x = super::read_string(*q, &mut buf).unwrap();
+                let correct = result.next();
+                if correct.is_none() && x != "" {
+                    panic!("still getting results: {:?}", x);
+                } else if x == "" {
+                    break;
+                }
+                assert_eq!(x, *(correct.unwrap()));
+                buf.next();
+            }
+            assert_eq!(result.peek(), None);
+        }
+    }
+
+    #[test]
+    fn read_string_error() {
+        for q in ['\'', '\"'].iter() {
+            let s = format!("{}this is a bad string", q);
+            let mut buf = new_dummy_buf(s.lines()).peekable();
+            buf.next();
+            let r = super::read_string(*q, &mut buf);
+            assert!(r.is_err());
+            assert_eq!(
+                r.err().unwrap(),
+                format!("expected {} at the end of string", q)
+            );
+        }
+    }
+
+    #[test]
+    fn lex() {
+        use super::Token::{self, *};
+        let s = "echo this\\ is\\ a test\". ignore \"'this 'please | cat";
+        let ok: Vec<Result<Token, String>> = vec![
+            Ok(WordString('\u{0}', "echo".to_owned())),
+            Ok(Space),
+            Ok(WordString('\u{0}', "this is a".to_owned())),
+            Ok(Space),
+            Ok(WordString('\u{0}', "test".to_owned())),
+            Ok(WordString('\"', ". ignore ".to_owned())),
+            Ok(WordString('\'', "this ".to_owned())),
+            Ok(WordString('\u{0}', "please".to_owned())),
+            Ok(Space),
+            Ok(Pipe),
+            Ok(Space),
+            Ok(WordString('\u{0}', "cat".to_owned())),
+            Ok(Newline),
+        ];
+        let buf = new_dummy_buf(s.lines());
+        let l = super::Lexer::new(buf);
+        assert_eq!(l.collect::<Vec<_>>(), ok);
+    }
+
+    #[test]
+    fn lex_err() {
+        use super::Token::{self, *};
+        let s = "long_unimplemented_stuff & | cat";
+        let ok: Vec<Result<super::Token, String>> = vec![
+            Ok(WordString('\u{0}', "long_unimplemented_stuff".to_owned())),
+            Ok(Space),
+            Err("unexpected character &".to_owned()),
+        ];
+        let buf = new_dummy_buf(s.lines());
+        let mut l = super::Lexer::new(buf).peekable();
+        let mut result: Vec<Result<Token, String>> = Vec::new();
+        while let Some(x) = l.peek() {
+            result.push(x.clone());
+            if let Err(_) = x {
+                break;
+            }
+            l.next();
+        }
+        assert_eq!(result, ok);
+    }
+    // TODO: lexer tests
 }
