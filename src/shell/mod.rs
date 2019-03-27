@@ -1,9 +1,9 @@
-use crate::parser::{ParseNode, Parser};
+use crate::parser::{Parser, Pipeline};
 use crate::util::{BufReadChars, InteractiveLineReader, LineReader};
 use dirs;
 use std::env;
 use std::path::{Path, PathBuf};
-use std::process::{self, Command};
+use std::process::{self, Child, Command, Stdio};
 
 /// The shell engine with its internal state.
 ///
@@ -30,9 +30,8 @@ impl<R: LineReader> Shell<R> {
     /// Start the REPL.
     pub fn run(&mut self) {
         for t in self.p.by_ref() {
-            if let Ok(ParseNode::Command(c)) = t {
-                let parts = c.1.iter().map(|x| &x[..]);
-                if let Err(error) = Self::run_command(&c.0, parts) {
+            if let Ok(p) = t {
+                if let Err(error) = Self::run_pipeline(p) {
                     eprintln!("{}", error);
                 }
             } else if let Err(e) = t {
@@ -42,6 +41,7 @@ impl<R: LineReader> Shell<R> {
         }
     }
 
+    /// `cd` builtin
     fn do_cd<'a, I>(mut args: I) -> Result<(), String>
     where
         I: Iterator<Item = &'a str>,
@@ -60,22 +60,48 @@ impl<R: LineReader> Shell<R> {
         }
     }
 
-    fn run_command<'a, I>(command: &str, args: I) -> Result<(), String>
-    where
-        I: Iterator<Item = &'a str>,
-    {
-        match command {
-            "cd" => Self::do_cd(args),
-            _ => match Command::new(command).args(args).spawn() {
-                Ok(mut child) => {
-                    if let Err(error) = child.wait() {
-                        return Err(format!("rwsh: {}", error));
-                    }
-                    Ok(())
+    /// Runs a [Pipeline](../parser/struct.Pipeline.html)
+    fn run_pipeline(p: Pipeline) -> Result<(), String> {
+        let mut previous_command = None;
+        let len = p.0.len();
+        for (i, command) in p.0.iter().enumerate() {
+            match &command.0 as &str {
+                "cd" => {
+                    return Self::do_cd(command.1.iter().map(|x| &x[..]));
                 }
-                Err(error) => Err(format!("rwsh: {}", error)),
-            },
+                name => {
+                    let stdin = previous_command.map_or(Stdio::inherit(), |output: Child| {
+                        Stdio::from(output.stdout.unwrap())
+                    });
+                    let stdout = if i + 1 < len {
+                        Stdio::piped()
+                    } else {
+                        Stdio::inherit()
+                    };
+
+                    match Command::new(name)
+                        .args(command.1.iter())
+                        .stdin(stdin)
+                        .stdout(stdout)
+                        .spawn()
+                    {
+                        Ok(output) => {
+                            previous_command = Some(output);
+                        }
+                        Err(e) => {
+                            return Err(format!("rwsh: {}", e));
+                        }
+                    }
+                }
+            }
         }
+
+        if let Some(mut final_command) = previous_command {
+            if let Err(e) = final_command.wait() {
+                return Err(format!("rwsh: {}", e));
+            }
+        }
+        Ok(())
     }
 }
 
