@@ -1,4 +1,3 @@
-use crate::parser::lex::Lexer;
 use crate::parser::{ParseNode, Parser};
 use crate::util::{BufReadChars, InteractiveLineReader, LineReader};
 use dirs;
@@ -16,7 +15,7 @@ pub struct Shell<R: LineReader> {
 impl Shell<InteractiveLineReader> {
     /// Create a new `Shell` with an [`InteractiveLineReader`](../util/struct.InteractiveLineReader.html).
     pub fn new_interactive() -> Shell<InteractiveLineReader> {
-        Shell::<InteractiveLineReader>::new(InteractiveLineReader::new())
+        Self::new(InteractiveLineReader::new())
     }
 }
 
@@ -24,8 +23,7 @@ impl<R: LineReader> Shell<R> {
     /// Returns a new `Shell` with the given [`LineReader`](../util/trait.LineReader.html).
     pub fn new(r: R) -> Shell<R> {
         let buf = BufReadChars::new(r);
-        let l = Lexer::new(buf);
-        let p = Parser::new(l);
+        let p = Parser::new(buf);
         Shell { p }
     }
 
@@ -34,7 +32,7 @@ impl<R: LineReader> Shell<R> {
         for t in self.p.by_ref() {
             if let Ok(ParseNode::Command(c)) = t {
                 let parts = c.1.iter().map(|x| &x[..]);
-                if let Err(error) = Shell::<R>::run_command(&c.0, parts) {
+                if let Err(error) = Self::run_command(&c.0, parts) {
                     eprintln!("{}", error);
                 }
             } else if let Err(e) = t {
@@ -67,7 +65,7 @@ impl<R: LineReader> Shell<R> {
         I: Iterator<Item = &'a str>,
     {
         match command {
-            "cd" => Shell::<R>::do_cd(args),
+            "cd" => Self::do_cd(args),
             _ => match Command::new(command).args(args).spawn() {
                 Ok(mut child) => {
                     if let Err(error) = child.wait() {

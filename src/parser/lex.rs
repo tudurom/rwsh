@@ -66,7 +66,7 @@ impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
 
 fn skip_whitespace<I: Iterator<Item = char>>(it: &mut Peekable<I>) {
     while let Some(&c) = it.peek() {
-        if !c.is_whitespace() {
+        if !c.is_whitespace() || c == '\n' {
             break;
         }
         it.next();
@@ -90,7 +90,7 @@ fn read_string<I: Iterator<Item = char>>(
     if quote == '\0' {
         while let Some(&c) = it.peek() {
             if escaping {
-                s.push(super::escape(c));
+                s.push(escape(c));
                 escaping = false;
             } else if c == '\\' {
                 escaping = true;
@@ -106,7 +106,7 @@ fn read_string<I: Iterator<Item = char>>(
         let mut closed = false;
         while let Some(&c) = it.peek() {
             if escaping {
-                s.push(super::escape(c));
+                s.push(escape(c));
                 escaping = false;
             } else {
                 if c == quote {
@@ -130,6 +130,16 @@ fn read_string<I: Iterator<Item = char>>(
         Err(format!("expected {} at the end of string", quote))
     } else {
         Ok(s)
+    }
+}
+
+fn escape(c: char) -> char {
+    match c {
+        'n' => '\n',
+        't' => '\t',
+        'a' => '\x07',
+        'b' => '\x08',
+        _ => c,
     }
 }
 
@@ -202,7 +212,7 @@ mod tests {
     #[test]
     fn lex() {
         use super::Token::{self, *};
-        let s = "echo this\\ is\\ a test\". ignore \"'this 'please | cat";
+        let s = "echo this\\ is\\ a test\". ignore \"'this 'please | cat\nmeow";
         let ok: Vec<Result<Token, String>> = vec![
             Ok(WordString('\u{0}', "echo".to_owned())),
             Ok(Space),
@@ -216,6 +226,8 @@ mod tests {
             Ok(Pipe),
             Ok(Space),
             Ok(WordString('\u{0}', "cat".to_owned())),
+            Ok(Newline),
+            Ok(WordString('\u{0}', "meow".to_owned())),
             Ok(Newline),
         ];
         let buf = new_dummy_buf(s.lines());
@@ -244,5 +256,4 @@ mod tests {
         }
         assert_eq!(result, ok);
     }
-    // TODO: lexer tests
 }

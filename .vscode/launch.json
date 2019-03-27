@@ -14,7 +14,9 @@
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=rwsh"
+                    "--package=rwsh",
+                    "--",
+                    "--test-threads 1",
                 ],
                 "filter": {
                     "kind": "lib"
