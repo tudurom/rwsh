@@ -1,3 +1,6 @@
+pub mod sre;
+
+use sre::Token as SREToken;
 use std::iter::Peekable;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -6,6 +9,8 @@ pub enum Token {
     Space,
     /// The pipe (`|`) character.
     Pipe,
+    /// A structural regular expression pipe (`|>`) and its SRE code
+    SREPipe(Vec<SREToken>),
     /// A newline.
     Newline,
     /// A sequence of concatenated words.
@@ -48,6 +53,12 @@ impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
                 }
             } else if c == '|' {
                 self.input.next();
+                /*
+                if let Some('>') = self.input.peek() {
+                    self.input.next();
+                    return Some(Ok(Token::SREPipe));
+                }
+                */
                 return Some(Ok(Token::Pipe));
             } else if c == '\n' {
                 self.input.next();
