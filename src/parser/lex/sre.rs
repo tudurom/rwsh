@@ -2,8 +2,6 @@ use std::iter::Peekable;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
-    Space,
-
     CharAddress(usize),
     LineAddr(usize),
     Regexp(String),
@@ -23,7 +21,7 @@ pub fn lex_address<I: Iterator<Item = char>>(it: &mut Peekable<I>) -> Result<Vec
         if c == '\n' || c == '|' {
             break;
         } else if c.is_whitespace() {
-            v.push(scan_space(it));
+            scan_space(it);
         } else if c == '#' {
             v.push(scan_address(it, true));
         } else if c.is_digit(10) {
@@ -58,7 +56,7 @@ pub fn lex_address<I: Iterator<Item = char>>(it: &mut Peekable<I>) -> Result<Vec
     Ok(v)
 }
 
-fn scan_space<I: Iterator<Item = char>>(it: &mut Peekable<I>) -> Token {
+fn scan_space<I: Iterator<Item = char>>(it: &mut Peekable<I>) {
     while let Some(&c) = it.peek() {
         if c.is_whitespace() {
             it.next();
@@ -66,8 +64,6 @@ fn scan_space<I: Iterator<Item = char>>(it: &mut Peekable<I>) -> Token {
             break;
         }
     }
-
-    Token::Space
 }
 
 fn scan_address<I: Iterator<Item = char>>(it: &mut Peekable<I>, is_char: bool) -> Token {
@@ -76,15 +72,20 @@ fn scan_address<I: Iterator<Item = char>>(it: &mut Peekable<I>, is_char: bool) -
     }
 
     let mut num: usize = 0;
+    let mut init = true;
     while let Some(&c) = it.peek() {
         if c.is_digit(10) {
             num = num * 10 + c.to_digit(10).unwrap() as usize;
+            init = false;
         } else {
             break;
         }
         it.next();
     }
 
+    if init {
+        num = 1;
+    }
     if is_char {
         Token::CharAddress(num)
     } else {
@@ -167,15 +168,15 @@ mod tests {
     fn space() {
         let s = "   \t\t   xy";
         let mut buf = new_dummy_buf(s.lines()).peekable();
-        assert_eq!(super::scan_space(&mut buf), Space);
+        super::scan_space(&mut buf);
         assert_eq!(buf.peek(), Some(&'x'));
     }
 
     #[test]
     fn address_lex() {
         let mut buf = new_dummy_buf("-0+,+320-d".lines()).peekable();
-        assert_eq!(Ok(
-            vec![
+        assert_eq!(
+            Ok(vec![
                 Minus,
                 LineAddr(0),
                 Plus,
@@ -183,7 +184,8 @@ mod tests {
                 Plus,
                 LineAddr(320),
                 Minus,
-            ],
-        ), super::lex_address(&mut buf));
+            ],),
+            super::lex_address(&mut buf)
+        );
     }
 }

@@ -1,4 +1,5 @@
 pub mod lex;
+pub mod sre;
 
 use self::lex::Lexer;
 use crate::util::{BufReadChars, LineReader};
