@@ -1,6 +1,8 @@
 use std::io::{self, stdin, stdout, Write};
 use std::iter::Iterator;
 
+pub mod process;
+
 /// An interface for reading lines of UTF-8 texts.
 pub trait LineReader {
     fn read_line(&mut self) -> io::Result<Option<String>>;

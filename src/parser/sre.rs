@@ -180,7 +180,6 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         let mut init = true;
         loop {
             let mut real_cur = self.addr_set.get(cur);
-            println!("simple is {:?}", real_cur.simple);
             if is_high_precedence(&real_cur.simple) {
                 /*
                     A high precedende compound is of the form

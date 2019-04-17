@@ -1,9 +1,11 @@
 use crate::parser::{Parser, Pipeline};
+use crate::util::process::{self, Child};
 use crate::util::{BufReadChars, InteractiveLineReader, LineReader};
-use dirs;
+use nix::unistd::getcwd;
 use std::env;
 use std::path::{Path, PathBuf};
-use std::process::{self, Child, Command, Stdio};
+use std::process::exit;
+use std::ffi::OsStr;
 
 /// The shell engine with its internal state.
 ///
@@ -36,7 +38,7 @@ impl<R: LineReader> Shell<R> {
                 }
             } else if let Err(e) = t {
                 eprintln!("{}", e);
-                process::exit(1);
+                exit(1);
             }
         }
     }
@@ -47,7 +49,7 @@ impl<R: LineReader> Shell<R> {
         I: Iterator<Item = &'a str>,
     {
         let dir: &str;
-        let home = dirs::home_dir().unwrap();
+        let home = getcwd().unwrap();
         if let Some(arg) = args.next() {
             dir = arg;
         } else {
@@ -70,23 +72,16 @@ impl<R: LineReader> Shell<R> {
                     return Self::do_cd(command.1.iter().map(|x| &x[..]));
                 }
                 name => {
-                    let stdin = previous_command.map_or(Stdio::inherit(), |output: Child| {
-                        Stdio::from(output.stdout.unwrap())
-                    });
-                    let stdout = if i + 1 < len {
-                        Stdio::piped()
-                    } else {
-                        Stdio::inherit()
-                    };
+                    let stdin = previous_command.map_or(0, |output: Child| output.output);
 
-                    match Command::new(name)
-                        .args(command.1.iter())
-                        .stdin(stdin)
-                        .stdout(stdout)
-                        .spawn()
-                    {
-                        Ok(output) => {
-                            previous_command = Some(output);
+                    match process::run_command(
+                        process::exec(name, command.1.iter()),
+                        stdin,
+                        i == 0,
+                        i == len - 1,
+                    ) {
+                        Ok(child) => {
+                            previous_command = Some(child);
                         }
                         Err(e) => {
                             return Err(format!("rwsh: {}", e));
@@ -118,7 +113,7 @@ fn expand_home<P: AsRef<Path>>(path: P) -> PathBuf {
 
     if let Some(p) = it.peek() {
         if *p == "~" {
-            new_path.push(dirs::home_dir().unwrap());
+            new_path.push(getcwd().unwrap());
             it.next();
         }
     }
