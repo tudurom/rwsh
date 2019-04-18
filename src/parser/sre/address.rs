@@ -1,7 +1,8 @@
-use super::lex::sre::{lex_address, Token};
+use crate::parser::lex::sre::{lex_address, Token};
 use std::cell::RefCell;
 use std::iter::Peekable;
 use std::vec::IntoIter;
+use crate::util::{BufReadChars, LineReader, ParseError};
 
 #[derive(Debug, Clone, PartialEq)]
 enum SimpleAddress {
@@ -101,9 +102,9 @@ pub struct Parser<I: Iterator<Item = Token>> {
 }
 
 impl Parser<IntoIter<Token>> {
-    fn new<C: Iterator<Item = char>>(
-        it: &mut Peekable<C>,
-    ) -> Result<Parser<IntoIter<Token>>, String> {
+    fn new<R: LineReader>(
+        it: &mut BufReadChars<R>,
+    ) -> Result<Parser<IntoIter<Token>>, ParseError> {
         let it = lex_address(it)?.into_iter();
         Ok(Parser {
             tokens: RefCell::new(it.peekable()),
@@ -252,10 +253,11 @@ mod tests {
     use super::ComposedAddress;
     use super::SimpleAddress::*;
     use crate::tests::common::new_dummy_buf;
+    use crate::util::ParseError;
     #[test]
     fn simple_address() {
         let s = "-0+";
-        let mut buf = new_dummy_buf(s.lines()).peekable();
+        let mut buf = new_dummy_buf(s.lines());
         let p = super::Parser::new(&mut buf).unwrap();
         let x = p.parse_simple_address().unwrap();
         assert_eq!(
@@ -324,7 +326,7 @@ mod tests {
                 })),
             })),
         }));
-        let mut buf = new_dummy_buf(s.lines()).peekable();
+        let mut buf = new_dummy_buf(s.lines());
         let p = super::Parser::new(&mut buf).unwrap();
         assert_eq!(p.parse(), ok);
     }

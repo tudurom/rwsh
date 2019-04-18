@@ -1,6 +1,6 @@
 use crate::parser::{Parser, Pipeline};
 use crate::util::{BufReadChars, InteractiveLineReader, LineReader};
-use dirs;
+use nix::unistd;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::{self, Child, Command, Stdio};
@@ -47,7 +47,7 @@ impl<R: LineReader> Shell<R> {
         I: Iterator<Item = &'a str>,
     {
         let dir: &str;
-        let home = dirs::home_dir().unwrap();
+        let home = unistd::getcwd().unwrap();
         if let Some(arg) = args.next() {
             dir = arg;
         } else {
@@ -118,7 +118,7 @@ fn expand_home<P: AsRef<Path>>(path: P) -> PathBuf {
 
     if let Some(p) = it.peek() {
         if *p == "~" {
-            new_path.push(dirs::home_dir().unwrap());
+            new_path.push(unistd::getcwd().unwrap());
             it.next();
         }
     }

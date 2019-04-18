@@ -1,5 +1,44 @@
+use std::error::Error;
+use std::fmt;
 use std::io::{self, stdin, stdout, Write};
 use std::iter::Iterator;
+
+#[derive(Debug,Clone)]
+pub struct ParseError {
+    pub message: String,
+    pub line: usize,
+    pub col: usize,
+}
+
+impl ParseError {
+    pub fn mute_error(message: String) -> ParseError {
+        ParseError {
+            message: message,
+            line: 0,
+            col: 0,
+        }
+    }
+}
+
+impl PartialEq<ParseError> for ParseError {
+    fn eq(&self, other: &ParseError) -> bool {
+        self.message == other.message
+    }
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.line == 0 {
+            write!(f, "{}", self.message)
+        } else if self.col == 0 {
+            write!(f, "{}: {}", self.line, self.message)
+        } else {
+            write!(f, "{}:{}: {}", self.line, self.col, self.message)
+        }
+    }
+}
+
+impl Error for ParseError {}
 
 /// An interface for reading lines of UTF-8 texts.
 pub trait LineReader {
@@ -43,6 +82,9 @@ pub struct BufReadChars<R: LineReader> {
     finished: bool,
     i: usize,
     initialized: bool,
+    line: usize,
+    col: usize,
+    peeked: Option<Option<char>>,
 }
 
 impl<R: LineReader> BufReadChars<R> {
@@ -53,6 +95,9 @@ impl<R: LineReader> BufReadChars<R> {
             finished: false,
             i: 0,
             initialized: false,
+            line: 0,
+            col: 0,
+            peeked: None,
         }
     }
 
@@ -62,6 +107,8 @@ impl<R: LineReader> BufReadChars<R> {
                 self.chars = line.chars().collect();
                 self.i = 0;
                 self.initialized = true;
+                self.line += 1;
+                self.col = 0;
             }
             None => self.finished = true,
         }
@@ -75,11 +122,33 @@ impl<R: LineReader> BufReadChars<R> {
             Some(self.chars[self.i - 1])
         }
     }
+
+    pub fn get_pos(&self) -> (usize, usize) {
+        (self.line, self.col)
+    }
+
+    pub fn new_error(&self, message: String) -> ParseError {
+        ParseError {
+            line: self.line,
+            col: self.col,
+            message: message,
+        }
+    }
+
+    pub fn peek(&mut self) -> Option<&<Self as Iterator>::Item> {
+        if self.peeked.is_none() {
+            self.peeked = Some(self.next());
+        }
+        self.peeked.as_ref().unwrap().as_ref()
+    }
 }
 
 impl<R: LineReader> Iterator for BufReadChars<R> {
     type Item = char;
     fn next(&mut self) -> Option<Self::Item> {
+        if let Some(v) = self.peeked.take() {
+            return v;
+        }
         if self.finished {
             return None;
         }
@@ -88,7 +157,10 @@ impl<R: LineReader> Iterator for BufReadChars<R> {
             return self.next();
         }
         match self.next_char() {
-            Some(c) => Some(c),
+            Some(c) => {
+                self.col += 1;
+                Some(c)
+            },
             None => {
                 self.refresh();
 

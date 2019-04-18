@@ -5,4 +5,4 @@ authors = ["Tudor Roman <tudurom@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-dirs = "1.0.5"
+nix = "0.13.0"

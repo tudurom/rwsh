@@ -1,4 +1,5 @@
 use std::iter::Peekable;
+use crate::util::{ParseError, LineReader, BufReadChars};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -15,7 +16,7 @@ pub enum Token {
     Dollar,
 }
 
-pub fn lex_address<I: Iterator<Item = char>>(it: &mut Peekable<I>) -> Result<Vec<Token>, String> {
+pub fn lex_address<R: LineReader>(it: &mut BufReadChars<R>) -> Result<Vec<Token>, ParseError> {
     let mut v: Vec<Token> = Vec::new();
     while let Some(&c) = it.peek() {
         if c == '\n' || c == '|' {
@@ -56,7 +57,7 @@ pub fn lex_address<I: Iterator<Item = char>>(it: &mut Peekable<I>) -> Result<Vec
     Ok(v)
 }
 
-fn scan_space<I: Iterator<Item = char>>(it: &mut Peekable<I>) {
+fn scan_space<R: LineReader>(it: &mut BufReadChars<R>) {
     while let Some(&c) = it.peek() {
         if c.is_whitespace() {
             it.next();
@@ -66,7 +67,7 @@ fn scan_space<I: Iterator<Item = char>>(it: &mut Peekable<I>) {
     }
 }
 
-fn scan_address<I: Iterator<Item = char>>(it: &mut Peekable<I>, is_char: bool) -> Token {
+fn scan_address<R: LineReader>(it: &mut BufReadChars<R>, is_char: bool) -> Token {
     if is_char {
         it.next(); // eat #
     }
@@ -93,10 +94,10 @@ fn scan_address<I: Iterator<Item = char>>(it: &mut Peekable<I>, is_char: bool) -
     }
 }
 
-fn scan_regexp<I: Iterator<Item = char>>(
-    it: &mut Peekable<I>,
+fn scan_regexp<R: LineReader>(
+    it: &mut BufReadChars<R>,
     reverse: bool,
-) -> Result<Token, String> {
+) -> Result<Token, ParseError> {
     let mut s = String::new();
     let mut closed = false;
     let mut escaping = false;
@@ -133,7 +134,7 @@ fn scan_regexp<I: Iterator<Item = char>>(
             Ok(Token::Regexp(s))
         }
     } else {
-        Err("unclosed regex".to_owned())
+        Err(it.new_error("unclosed regex".to_owned()))
     }
 }
 
@@ -145,7 +146,7 @@ mod tests {
     #[test]
     fn regexp() {
         let s = "/lm(a[o-z]\\\\))/?xd(lol)?";
-        let mut buf = new_dummy_buf(s.lines()).peekable();
+        let mut buf = new_dummy_buf(s.lines());
         assert_eq!(
             super::scan_regexp(&mut buf, false),
             Ok(Regexp("/lm(a[o-z]\\))".to_owned()))
@@ -159,7 +160,7 @@ mod tests {
     #[test]
     fn address() {
         let s = "420#69";
-        let mut buf = new_dummy_buf(s.lines()).peekable();
+        let mut buf = new_dummy_buf(s.lines());
         assert_eq!(super::scan_address(&mut buf, false), LineAddr(420));
         assert_eq!(super::scan_address(&mut buf, true), CharAddress(69));
     }
@@ -167,14 +168,14 @@ mod tests {
     #[test]
     fn space() {
         let s = "   \t\t   xy";
-        let mut buf = new_dummy_buf(s.lines()).peekable();
+        let mut buf = new_dummy_buf(s.lines());
         super::scan_space(&mut buf);
         assert_eq!(buf.peek(), Some(&'x'));
     }
 
     #[test]
     fn address_lex() {
-        let mut buf = new_dummy_buf("-0+,+320-d".lines()).peekable();
+        let mut buf = new_dummy_buf("-0+,+320-d".lines());
         assert_eq!(
             Ok(vec![
                 Minus,
