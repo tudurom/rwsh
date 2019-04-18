@@ -1,3 +1,5 @@
+pub mod process;
+
 use std::error::Error;
 use std::fmt;
 use std::io::{self, stdin, stdout, Write};
