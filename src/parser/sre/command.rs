@@ -1,8 +1,7 @@
 use crate::sre::Command;
+use crate::util::{BufReadChars, LineReader, ParseError};
 use std::iter::Peekable;
 
-pub fn parse_command<C: Iterator<Item = char>>(
-    it: &mut Peekable<C>,
-) -> Result<Box<Command>, String> {
+pub fn parse_command<R: LineReader>(it: &mut BufReadChars<R>) -> Result<Box<Command>, ParseError> {
     Ok(Box::new(crate::sre::commands::P))
 }

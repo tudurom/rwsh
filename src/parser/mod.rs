@@ -1,8 +1,9 @@
 pub mod lex;
 pub mod sre;
 
-use self::lex::Lexer;
+use self::lex::{Lexer, Token};
 use crate::util::{BufReadChars, LineReader, ParseError};
+use std::cell::RefCell;
 use std::iter::Peekable;
 
 /// A command tuple is made of its name and its arguments.
@@ -21,8 +22,9 @@ pub enum Task {
 pub struct Pipeline(pub Vec<Command>);
 
 /// Parses the series of [`Token`s](./lex/enum.Token.html) to the AST ([`ParseNode`s](enum.ParseNode.html)).
+#[derive(Clone)]
 pub struct Parser<R: LineReader> {
-    lexer: Peekable<Lexer<R>>,
+    lexer: RefCell<Peekable<Lexer<R>>>,
     error: Option<String>,
 }
 
@@ -35,9 +37,17 @@ impl<R: LineReader> Parser<R> {
     /// Creates a new parser from a [`Lexer`](./lex/struct.Lexer.html).
     pub fn from_lexer(lexer: Lexer<R>) -> Parser<R> {
         Parser {
-            lexer: lexer.peekable(),
+            lexer: RefCell::new(lexer.peekable()),
             error: None,
         }
+    }
+
+    fn peek(&self) -> Option<Result<Token, ParseError>> {
+        self.lexer.borrow_mut().peek().cloned()
+    }
+
+    fn next_tok(&self) -> Option<Result<Token, ParseError>> {
+        self.lexer.borrow_mut().next()
     }
 
     /// Parses a pipeline.
@@ -50,17 +60,24 @@ impl<R: LineReader> Parser<R> {
     ///
     /// Here, there are two commands, `dmesg` and `lolcat`, piped together.
     fn parse_pipeline(&mut self) -> Option<Result<Pipeline, ParseError>> {
-        self.skip_space();
         // the grammar is pipeline ::= command pipeline | command
         match self.parse_command() {
             Some(Ok(c)) => {
                 let mut v: Vec<Command> = vec![c];
-                match self.lexer.peek() {
-                    Some(Ok(lex::Token{kind: lex::TokenKind::Newline, ..})) => {
-                        self.lexer.next();
+                match self.peek() {
+                    Some(Ok(lex::Token {
+                        kind: lex::TokenKind::Newline,
+                        ..
+                    })) => {
+                        self.next_tok();
                     }
-                    Some(Ok(lex::Token{kind: lex::TokenKind::Pipe, ..})) => {
-                        self.lexer.next();
+                    Some(Ok(
+                        ref tok @ lex::Token {
+                            kind: lex::TokenKind::Pipe,
+                            ..
+                        },
+                    )) => {
+                        self.next_tok();
                         match self.parse_pipeline() {
                             Some(Ok(Pipeline(ref mut new_v))) => {
                                 v.append(new_v);
@@ -69,12 +86,16 @@ impl<R: LineReader> Parser<R> {
                                 return Some(Err(e.clone()));
                             }
                             None => {
-                                return Some(Err(ParseError::mute_error("expected pipeline, got EOF".to_owned())));
+                                return Some(Err(
+                                    tok.new_error("expected pipeline, got EOF".to_owned())
+                                ));
                             }
                         }
                     }
-                    Some(Ok(t)) => {
-                        return Some(Err(ParseError::mute_error(format!("unexpected token {:?}", t))));
+                    Some(Ok(tok)) => {
+                        return Some(Err(
+                            tok.new_error(format!("unexpected token {:?}", tok.kind))
+                        ));
                     }
                     Some(Err(e)) => {
                         return Some(Err(e.clone()));
@@ -95,20 +116,29 @@ impl<R: LineReader> Parser<R> {
         match self.parse_word_list() {
             Some(Ok(name)) => {
                 let mut v: Vec<String> = Vec::new();
-                while let Some(r) = self.lexer.peek() {
+                while let Some(r) = self.peek() {
                     match r {
                         Ok(tok) => match tok {
-                            lex::Token{kind: lex::TokenKind::WordString(_, _), ..} => match self.parse_word_list() {
+                            lex::Token {
+                                kind: lex::TokenKind::WordString(_, _),
+                                ..
+                            } => match self.parse_word_list() {
                                 Some(Ok(wl)) => {
                                     v.push(wl);
                                 }
                                 Some(Err(e)) => return Some(Err(e)),
                                 None => panic!("no WordString"),
                             },
-                            lex::Token{kind: lex::TokenKind::Space, ..} => {
-                                self.lexer.next();
+                            lex::Token {
+                                kind: lex::TokenKind::Space,
+                                ..
+                            } => {
+                                self.next_tok();
                             }
-                            lex::Token{kind: lex::TokenKind::Newline, ..} => {
+                            lex::Token {
+                                kind: lex::TokenKind::Newline,
+                                ..
+                            } => {
                                 break;
                             }
                             _ => {
@@ -128,25 +158,48 @@ impl<R: LineReader> Parser<R> {
     }
     fn skip_space(&mut self) -> usize {
         let mut len: usize = 0;
-        while let Some(Ok(lex::Token{kind: lex::TokenKind::Space, len: l, ..})) | Some(Ok(lex::Token{kind: lex::TokenKind::Newline, len: l, ..})) = self.lexer.peek() {
+        while let Some(Ok(lex::Token {
+            kind: lex::TokenKind::Space,
+            len: l,
+            ..
+        }))
+        | Some(Ok(lex::Token {
+            kind: lex::TokenKind::Newline,
+            len: l,
+            ..
+        })) = self.peek()
+        {
             len += l;
-            self.lexer.next();
+            self.next_tok();
         }
         len
     }
     fn parse_word_list(&mut self) -> Option<Result<String, ParseError>> {
         let mut r = String::new();
         self.skip_space();
-        match self.lexer.peek() {
-            Some(Ok(lex::Token{kind: lex::TokenKind::WordString(_, _), ..})) => {}
-            Some(Ok(tok)) => return Some(Err(ParseError::mute_error(format!("unexpected token {:?} in word list", tok)))),
+        match self.peek() {
+            Some(Ok(lex::Token {
+                kind: lex::TokenKind::WordString(_, _),
+                ..
+            })) => {}
+            Some(Ok(lex::Token { kind, pos, .. })) => {
+                return Some(Err(ParseError {
+                    line: pos.0,
+                    col: pos.1,
+                    message: format!("unexpected token {:?} in word list", kind),
+                }));
+            }
             _ => {}
         }
-        while let Some(Ok(lex::Token{kind: lex::TokenKind::WordString(_, s), ..})) = self.lexer.peek() {
-            r.push_str(s);
-            self.lexer.next();
+        while let Some(Ok(lex::Token {
+            kind: lex::TokenKind::WordString(_, s),
+            ..
+        })) = self.peek()
+        {
+            r.push_str(&s);
+            self.next_tok();
         }
-        if let Some(Err(e)) = self.lexer.peek() {
+        if let Some(Err(e)) = self.peek() {
             Some(Err(e.clone()))
         } else if r.is_empty() {
             None

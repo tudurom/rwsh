@@ -1,8 +1,8 @@
 use crate::parser::lex::sre::{lex_address, Token};
+use crate::util::{BufReadChars, LineReader, ParseError};
 use std::cell::RefCell;
 use std::iter::Peekable;
 use std::vec::IntoIter;
-use crate::util::{BufReadChars, LineReader, ParseError};
 
 #[derive(Debug, Clone, PartialEq)]
 enum SimpleAddress {
@@ -18,7 +18,13 @@ enum SimpleAddress {
     Dollar,
 }
 
-#[derive(Debug, Clone)]
+impl Default for SimpleAddress {
+    fn default() -> Self {
+        SimpleAddress::Nothing
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct Address {
     simple: SimpleAddress,
     left: Option<usize>,
@@ -35,6 +41,7 @@ impl Address {
     }
 }
 
+#[derive(Default)]
 pub struct AddressSet {
     vec: RefCell<Vec<Address>>,
 }
@@ -102,9 +109,7 @@ pub struct Parser<I: Iterator<Item = Token>> {
 }
 
 impl Parser<IntoIter<Token>> {
-    fn new<R: LineReader>(
-        it: &mut BufReadChars<R>,
-    ) -> Result<Parser<IntoIter<Token>>, ParseError> {
+    fn new<R: LineReader>(it: &mut BufReadChars<R>) -> Result<Parser<IntoIter<Token>>, ParseError> {
         let it = lex_address(it)?.into_iter();
         Ok(Parser {
             tokens: RefCell::new(it.peekable()),

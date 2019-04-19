@@ -5,7 +5,7 @@ use std::fmt;
 use std::io::{self, stdin, stdout, Write};
 use std::iter::Iterator;
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct ParseError {
     pub message: String,
     pub line: usize,
@@ -15,7 +15,7 @@ pub struct ParseError {
 impl ParseError {
     pub fn mute_error(message: String) -> ParseError {
         ParseError {
-            message: message,
+            message,
             line: 0,
             col: 0,
         }
@@ -48,7 +48,7 @@ pub trait LineReader {
 }
 
 /// A [`LineReader`](trait.LineReader.html) that reads from `stdin` and prints a prompt.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct InteractiveLineReader(String);
 
 impl InteractiveLineReader {
@@ -78,6 +78,7 @@ impl LineReader for InteractiveLineReader {
 }
 
 /// A char iterator for UTF-8 texts.
+#[derive(Clone)]
 pub struct BufReadChars<R: LineReader> {
     r: R,
     chars: Vec<char>,
@@ -86,6 +87,7 @@ pub struct BufReadChars<R: LineReader> {
     initialized: bool,
     line: usize,
     col: usize,
+    #[allow(clippy::option_option)]
     peeked: Option<Option<char>>,
 }
 
@@ -133,7 +135,7 @@ impl<R: LineReader> BufReadChars<R> {
         ParseError {
             line: self.line,
             col: self.col,
-            message: message,
+            message,
         }
     }
 
@@ -162,7 +164,7 @@ impl<R: LineReader> Iterator for BufReadChars<R> {
             Some(c) => {
                 self.col += 1;
                 Some(c)
-            },
+            }
             None => {
                 self.refresh();
 

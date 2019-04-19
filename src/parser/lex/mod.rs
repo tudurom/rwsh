@@ -1,7 +1,7 @@
 pub mod sre;
 
+use crate::util::{BufReadChars, LineReader, ParseError};
 use sre::Token as SREToken;
-use crate::util::{BufReadChars,LineReader,ParseError};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
@@ -27,6 +27,16 @@ pub struct Token {
     pub len: usize,
 }
 
+impl Token {
+    pub fn new_error(&self, message: String) -> ParseError {
+        ParseError {
+            line: self.pos.0,
+            col: self.pos.1,
+            message,
+        }
+    }
+}
+
 impl PartialEq<Token> for Token {
     fn eq(&self, other: &Token) -> bool {
         self.kind == other.kind
@@ -34,6 +44,7 @@ impl PartialEq<Token> for Token {
 }
 
 /// Transforms text to a sequence of [`Token`s](enum.Token.html).
+#[derive(Clone)]
 pub struct Lexer<R: LineReader> {
     input: BufReadChars<R>,
 }
@@ -48,9 +59,13 @@ impl<R: LineReader> Lexer<R> {
 
 #[macro_export]
 macro_rules! tok {
-    ($kind:expr, $len:expr, $it:expr) => (
-        Token {len: $len, pos: $it.get_pos(), kind: $kind}
-    );
+    ($kind:expr, $len:expr, $it:expr) => {
+        Token {
+            len: $len,
+            pos: $it.get_pos(),
+            kind: $kind,
+        }
+    };
 }
 
 impl<R: LineReader> Iterator for Lexer<R> {
@@ -60,14 +75,22 @@ impl<R: LineReader> Iterator for Lexer<R> {
         if let Some(&c) = self.input.peek() {
             if is_clear_string_char(c) {
                 match read_string('\0', &mut self.input) {
-                    Ok(s) => return Some(Ok(tok!(TokenKind::WordString('\0', s), s.len(), self.input))),
-                    Err(e) => return Some(Err(e)),
+                    Ok(s) => Some(Ok(tok!(
+                        TokenKind::WordString('\0', s),
+                        s.len(),
+                        self.input
+                    ))),
+                    Err(e) => Some(Err(e)),
                 }
             } else if c == '"' || c == '\'' {
                 self.input.next();
                 match read_string(c, &mut self.input) {
-                    Ok(s) => return Some(Ok(tok!(TokenKind::WordString(c, s), s.len() + 2, self.input))),
-                    Err(e) => return Some(Err(e)),
+                    Ok(s) => Some(Ok(tok!(
+                        TokenKind::WordString(c, s),
+                        s.len() + 2,
+                        self.input
+                    ))),
+                    Err(e) => Some(Err(e)),
                 }
             } else if c == '|' {
                 self.input.next();
@@ -77,19 +100,21 @@ impl<R: LineReader> Iterator for Lexer<R> {
                     return Some(Ok(Token::SREPipe));
                 }
                 */
-                return Some(Ok(tok!(TokenKind::Pipe, 1, self.input)));
+                Some(Ok(tok!(TokenKind::Pipe, 1, self.input)))
             } else if c == '\n' {
                 self.input.next();
-                return Some(Ok(tok!(TokenKind::Newline, 0, self.input)));
+                Some(Ok(tok!(TokenKind::Newline, 0, self.input)))
             } else if c.is_whitespace() {
                 let len = skip_whitespace(&mut self.input);
-                return Some(Ok(tok!(TokenKind::Space, len, self.input)));
+                Some(Ok(tok!(TokenKind::Space, len, self.input)))
             } else {
-                return Some(Err(self.input.new_error(format!("unexpected character {}", c))));
+                Some(Err(self
+                    .input
+                    .new_error(format!("unexpected character {}", c))))
             }
+        } else {
+            None
         }
-
-        None
     }
 }
 
@@ -113,10 +138,7 @@ fn is_clear_string_char(c: char) -> bool {
     !(c.is_control() || c.is_whitespace() || is_special_char(c))
 }
 
-fn read_string<R: LineReader>(
-    quote: char,
-    it: &mut BufReadChars<R>,
-) -> Result<String, ParseError> {
+fn read_string<R: LineReader>(quote: char, it: &mut BufReadChars<R>) -> Result<String, ParseError> {
     let mut s = String::new();
     let mut escaping = false;
     if quote == '\0' {
@@ -177,10 +199,10 @@ fn escape(c: char) -> char {
 
 #[cfg(test)]
 mod tests {
+    use super::Token;
+    use super::TokenKind::*;
     use crate::tests::common::new_dummy_buf;
     use crate::util::ParseError;
-    use super::TokenKind::*;
-    use super::Token;
 
     #[test]
     fn read_string_no_quotes() {
@@ -249,7 +271,11 @@ mod tests {
         let buf = new_dummy_buf(s.lines());
         macro_rules! tok {
             ($kind:expr) => {
-                super::Token{ kind: $kind, len: 0, pos: buf.get_pos() }
+                super::Token {
+                    kind: $kind,
+                    len: 0,
+                    pos: buf.get_pos(),
+                }
             };
         }
 
@@ -280,13 +306,20 @@ mod tests {
         let buf = new_dummy_buf(s.lines());
         macro_rules! tok {
             ($kind:expr) => {
-                super::Token{ kind: $kind, len: 0, pos: buf.get_pos() }
+                super::Token {
+                    kind: $kind,
+                    len: 0,
+                    pos: buf.get_pos(),
+                }
             };
         }
         let ok: Vec<Result<super::Token, ParseError>> = vec![
-            Ok(tok!(WordString('\u{0}', "long_unimplemented_stuff".to_owned()))),
+            Ok(tok!(WordString(
+                '\u{0}',
+                "long_unimplemented_stuff".to_owned()
+            ))),
             Ok(tok!(Space)),
-            Err(ParseError{
+            Err(ParseError {
                 message: "unexpected character &".to_owned(),
                 line: 0,
                 col: 0,

@@ -2,6 +2,7 @@ use crate::util::{BufReadChars, LineReader};
 use std::io;
 use std::str::Lines;
 
+#[derive(Clone)]
 pub struct DummyLineReader<'a>(pub Lines<'a>);
 
 impl<'a> LineReader for DummyLineReader<'a> {

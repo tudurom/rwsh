@@ -5,7 +5,6 @@ use nix::unistd;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::exit;
-use std::ffi::OsStr;
 
 /// The shell engine with its internal state.
 ///
@@ -91,7 +90,7 @@ impl<R: LineReader> Shell<R> {
             }
         }
 
-        if let Some(mut final_command) = previous_command {
+        if let Some(final_command) = previous_command {
             if let Err(e) = final_command.wait() {
                 return Err(format!("rwsh: {}", e));
             }
