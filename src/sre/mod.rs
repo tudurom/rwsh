@@ -1,5 +1,7 @@
 pub mod commands;
 
+use crate::parser::sre::address::ComposedAddress;
+use std::collections::LinkedList;
 use std::io::{self, Read, Write};
 
 #[derive(Debug)]
@@ -35,8 +37,21 @@ pub struct Address<'a> {
     buffer: &'a Buffer,
 }
 
-pub trait Command<'a> {
+pub trait SimpleCommand<'a>: std::fmt::Debug {
     fn execute(&self, w: &mut Write, dot: &'a Address) -> Vec<Address<'a>>;
+    fn to_tuple(&self) -> (char, LinkedList<String>);
+}
+
+#[derive(Debug)]
+pub struct Command<'a> {
+    address: ComposedAddress,
+    simple: Box<dyn SimpleCommand<'a>>,
+}
+
+impl<'a> Command<'a> {
+    pub fn new(address: ComposedAddress, simple: Box<dyn SimpleCommand<'a>>) -> Self {
+        Command { address, simple }
+    }
 }
 
 #[cfg(test)]

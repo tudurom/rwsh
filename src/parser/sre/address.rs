@@ -53,6 +53,16 @@ pub struct ComposedAddress {
     next: Option<Box<ComposedAddress>>,
 }
 
+impl Default for ComposedAddress {
+    fn default() -> Self {
+        ComposedAddress {
+            simple: SimpleAddress::Dot,
+            left: None,
+            next: None,
+        }
+    }
+}
+
 impl AddressSet {
     pub fn new() -> AddressSet {
         AddressSet {
@@ -109,7 +119,9 @@ pub struct Parser<I: Iterator<Item = Token>> {
 }
 
 impl Parser<IntoIter<Token>> {
-    fn new<R: LineReader>(it: &mut BufReadChars<R>) -> Result<Parser<IntoIter<Token>>, ParseError> {
+    pub fn new<R: LineReader>(
+        it: &mut BufReadChars<R>,
+    ) -> Result<Parser<IntoIter<Token>>, ParseError> {
         let it = lex_address(it)?.into_iter();
         Ok(Parser {
             tokens: RefCell::new(it.peekable()),
@@ -119,7 +131,7 @@ impl Parser<IntoIter<Token>> {
 }
 
 impl<I: Iterator<Item = Token>> Parser<I> {
-    fn parse(&self) -> Result<Option<ComposedAddress>, String> {
+    pub fn parse(&self) -> Result<Option<ComposedAddress>, String> {
         match self.do_parse() {
             Err(e) => Err(e),
             Ok(None) => Ok(None),

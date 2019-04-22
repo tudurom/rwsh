@@ -1,5 +1,6 @@
 pub mod sre;
 
+use super::{escape, skip_whitespace};
 use crate::util::{BufReadChars, LineReader, ParseError};
 use sre::Token as SREToken;
 
@@ -118,18 +119,6 @@ impl<R: LineReader> Iterator for Lexer<R> {
     }
 }
 
-fn skip_whitespace<R: LineReader>(it: &mut BufReadChars<R>) -> usize {
-    let mut len: usize = 0;
-    while let Some(&c) = it.peek() {
-        if !c.is_whitespace() || c == '\n' {
-            break;
-        }
-        len += 1;
-        it.next();
-    }
-    len
-}
-
 fn is_special_char(c: char) -> bool {
     c == '|' || c == '\'' || c == '\"' || c == '&'
 }
@@ -184,16 +173,6 @@ fn read_string<R: LineReader>(quote: char, it: &mut BufReadChars<R>) -> Result<S
         Err(it.new_error(format!("expected {} at the end of string", quote)))
     } else {
         Ok(s)
-    }
-}
-
-fn escape(c: char) -> char {
-    match c {
-        'n' => '\n',
-        't' => '\t',
-        'a' => '\x07',
-        'b' => '\x08',
-        _ => c,
     }
 }
 

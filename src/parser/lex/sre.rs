@@ -1,5 +1,4 @@
 use crate::util::{BufReadChars, LineReader, ParseError};
-use std::iter::Peekable;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {

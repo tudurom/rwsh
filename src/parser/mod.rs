@@ -6,6 +6,28 @@ use crate::util::{BufReadChars, LineReader, ParseError};
 use std::cell::RefCell;
 use std::iter::Peekable;
 
+fn skip_whitespace<R: LineReader>(it: &mut BufReadChars<R>) -> usize {
+    let mut len: usize = 0;
+    while let Some(&c) = it.peek() {
+        if !c.is_whitespace() || c == '\n' {
+            break;
+        }
+        len += 1;
+        it.next();
+    }
+    len
+}
+
+pub fn escape(c: char) -> char {
+    match c {
+        'n' => '\n',
+        't' => '\t',
+        'a' => '\x07',
+        'b' => '\x08',
+        _ => c,
+    }
+}
+
 /// A command tuple is made of its name and its arguments.
 #[derive(Debug, PartialEq)]
 pub struct Command(pub String, pub Vec<String>);

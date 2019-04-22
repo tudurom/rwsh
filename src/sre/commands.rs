@@ -7,19 +7,38 @@ fn p(w: &mut Write, chars: &[char]) {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct P;
 
-impl<'a> Command<'a> for P {
+impl<'a> SimpleCommand<'a> for P {
     fn execute(&self, w: &mut Write, dot: &'a Address) -> Vec<Address<'a>> {
         p(w, &dot.buffer.data[dot.r.0..dot.r.1]);
 
         vec![*dot]
     }
+    fn to_tuple(&self) -> (char, LinkedList<String>) {
+        ('p', LinkedList::new())
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct A(pub String);
+
+impl<'a> SimpleCommand<'a> for A {
+    fn execute(&self, w: &mut Write, dot: &'a Address) -> Vec<Address<'a>> {
+        unimplemented!()
+    }
+
+    fn to_tuple(&self) -> (char, LinkedList<String>) {
+        let mut list = LinkedList::new();
+        list.push_back(self.0.clone());
+        ('a', list)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::sre::Command;
+    use crate::sre::SimpleCommand;
     #[test]
     fn smoke() {
         let b = super::Buffer::new("xd lol".as_bytes()).unwrap();
