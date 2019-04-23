@@ -25,7 +25,22 @@ impl<'a> SimpleCommand<'a> for P {
 pub struct A(pub String);
 
 impl<'a> SimpleCommand<'a> for A {
-    fn execute(&self, w: &mut Write, dot: &'a Address) -> Vec<Address<'a>> {
+    fn execute(&self, _w: &mut Write, _dot: &'a Address) -> Vec<Address<'a>> {
+        unimplemented!()
+    }
+
+    fn to_tuple(&self) -> (char, LinkedList<String>) {
+        let mut list = LinkedList::new();
+        list.push_back(self.0.clone());
+        ('a', list)
+    }
+}
+
+#[derive(Debug)]
+pub struct X<'a>(pub String, pub Box<Command<'a>>);
+
+impl<'a, 'b> SimpleCommand<'a> for X<'b> {
+    fn execute(&self, _w: &mut Write, _dot: &'a Address) -> Vec<Address<'a>> {
         unimplemented!()
     }
 

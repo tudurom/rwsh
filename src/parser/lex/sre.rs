@@ -93,6 +93,7 @@ fn scan_address<R: LineReader>(it: &mut BufReadChars<R>, is_char: bool) -> Token
     }
 }
 
+#[allow(clippy::collapsible_if)]
 fn scan_regexp<R: LineReader>(
     it: &mut BufReadChars<R>,
     reverse: bool,

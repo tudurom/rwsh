@@ -5,7 +5,7 @@ use std::iter::Peekable;
 use std::vec::IntoIter;
 
 #[derive(Debug, Clone, PartialEq)]
-enum SimpleAddress {
+pub enum SimpleAddress {
     Nothing,
     Char(usize),
     Line(usize),
@@ -46,7 +46,7 @@ pub struct AddressSet {
     vec: RefCell<Vec<Address>>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ComposedAddress {
     simple: SimpleAddress,
     left: Option<Box<ComposedAddress>>,
@@ -60,6 +60,16 @@ impl Default for ComposedAddress {
             left: None,
             next: None,
         }
+    }
+}
+
+impl ComposedAddress {
+    pub fn new(
+        simple: SimpleAddress,
+        left: Option<Box<ComposedAddress>>,
+        next: Option<Box<ComposedAddress>>,
+    ) -> Self {
+        ComposedAddress { simple, left, next }
     }
 }
 
@@ -269,7 +279,6 @@ mod tests {
     use super::ComposedAddress;
     use super::SimpleAddress::*;
     use crate::tests::common::new_dummy_buf;
-    use crate::util::ParseError;
     #[test]
     fn simple_address() {
         let s = "-0+";

@@ -1,25 +1,25 @@
+use super::Command;
 use crate::parser::{escape, skip_whitespace};
-use crate::sre::{commands, SimpleCommand};
 use crate::util::{BufReadChars, LineReader, ParseError};
-use std::collections::LinkedList;
 
 fn arg_nr(name: char) -> i8 {
     match name {
         'p' => 0,
         'a' => 1,
+        'd' => 0,
+        'x' => 1,
+
         'Z' => 3, // for debugging
         _ => -1,
     }
 }
 
-fn build_command<'a>(name: char, mut args: LinkedList<String>) -> Box<dyn SimpleCommand<'a>> {
-    match name {
-        'p' => Box::new(commands::P),
-        'a' => Box::new(commands::A(args.pop_front().unwrap())),
-        _ => unimplemented!(),
-    }
+fn has_command_argument(name: char) -> bool {
+    let s = ['x'];
+    s.binary_search(&name).is_ok()
 }
 
+#[allow(clippy::collapsible_if)]
 fn read_arg<R: LineReader>(it: &mut BufReadChars<R>) -> Result<String, ParseError> {
     skip_whitespace(it);
     it.next(); // /
@@ -47,22 +47,27 @@ fn read_arg<R: LineReader>(it: &mut BufReadChars<R>) -> Result<String, ParseErro
     }
 }
 
-fn read_command<R: LineReader>(
-    it: &mut BufReadChars<R>,
-) -> Result<(char, LinkedList<String>), ParseError> {
+#[derive(Debug, PartialEq)]
+pub struct SimpleCommand {
+    pub name: char,
+    pub args: Vec<String>,
+    pub command_arg: Option<Box<Command>>,
+}
+
+pub fn parse_command<R: LineReader>(it: &mut BufReadChars<R>) -> Result<SimpleCommand, ParseError> {
     skip_whitespace(it);
     let chr = it.next();
-    let nr = chr.map_or(-1, |name| arg_nr(name));
-    let mut args = LinkedList::new();
+    let nr = chr.map_or(-1, arg_nr);
+    let mut args = Vec::new();
     match chr {
         Some(name) if nr != -1 => {
             let mut i = 0;
             while i < nr && it.peek() == Some(&'/') {
-                args.push_back(read_arg(it)?);
+                args.push(read_arg(it)?);
                 i += 1;
             }
             if i < nr {
-                let peek = it.peek().map(|c| *c);
+                let peek = it.peek().cloned();
                 if peek.is_none() {
                     Err(it.new_error("unexpected EOF when reading argument".to_owned()))
                 } else {
@@ -75,13 +80,20 @@ fn read_command<R: LineReader>(
                 if nr > 0 {
                     if let Some(&'/') = it.peek() {
                         it.next();
-                        Ok((name, args))
                     } else {
-                        Err(it.new_error("missing terminal '/' in parameter".to_owned()))
+                        return Err(it.new_error("missing terminal '/' in parameter".to_owned()));
                     }
-                } else {
-                    Ok((name, args))
                 }
+                let command_arg = if has_command_argument(name) {
+                    Some(super::parse_command(it)?)
+                } else {
+                    None
+                };
+                Ok(SimpleCommand {
+                    name,
+                    args,
+                    command_arg: command_arg.map(Box::new),
+                })
             }
         }
         Some(c) => Err(it.new_error(format!(
@@ -92,61 +104,61 @@ fn read_command<R: LineReader>(
     }
 }
 
-pub fn parse_simple_command<'a, R: LineReader>(
-    it: &mut BufReadChars<R>,
-) -> Result<Box<dyn SimpleCommand>, ParseError> {
-    read_command(it).map(|c| build_command(c.0, c.1))
-}
-
 #[cfg(test)]
 mod tests {
     use crate::tests::common::new_dummy_buf;
-    use std::collections::LinkedList;
-
-    // it's like vec! but for linked lists.
-    // pretty much a hack
-    macro_rules! ll {
-        ( $( $x:expr ),* ) => {
-            {
-                #[allow(unused_mut)]
-                let mut temp_list = LinkedList::new();
-                $(
-                    temp_list.push_back($x);
-                )*
-                temp_list
-            }
-        }
-    }
 
     #[test]
     fn smoke() {
         assert_eq!(
-            super::parse_simple_command(&mut new_dummy_buf("p".lines()))
-                .unwrap()
-                .to_tuple(),
-            ('p', ll![])
+            super::parse_command(&mut new_dummy_buf("p".lines())).unwrap(),
+            super::SimpleCommand {
+                name: 'p',
+                args: vec![],
+                command_arg: None
+            }
         );
         assert_eq!(
-            super::parse_simple_command(&mut new_dummy_buf("a/xd/".lines()))
-                .unwrap()
-                .to_tuple(),
-            ('a', ll!["xd".to_owned()])
+            super::parse_command(&mut new_dummy_buf("a/xd/".lines())).unwrap(),
+            super::SimpleCommand {
+                name: 'a',
+                args: vec!["xd".to_owned()],
+                command_arg: None
+            }
         );
     }
 
     #[test]
-    fn read_command() {
+    fn command_arg() {
+        let v = super::parse_command(&mut new_dummy_buf("x/lmao/ 1x/kek/ 2a/xd/".lines())).unwrap();
+        assert_eq!(v.command_arg.clone().unwrap().name, 'x');
+        assert_eq!(
+            v.command_arg.clone().unwrap().command_arg.unwrap().name,
+            'a'
+        );
+        assert!(v
+            .command_arg
+            .unwrap()
+            .command_arg
+            .unwrap()
+            .command_arg
+            .is_none());
+    }
+
+    #[test]
+    fn many_string_arguments() {
         let mut buf = new_dummy_buf("Z/xd  &$\\n#@\\/xd/\\tlol    /ke.k\\//".lines());
         assert_eq!(
-            super::read_command(&mut buf),
-            Ok((
-                'Z',
-                ll![
+            super::parse_command(&mut buf).unwrap(),
+            super::SimpleCommand {
+                name: 'Z',
+                args: vec![
                     "xd  &$\n#@/xd".to_owned(),
                     "\tlol    ".to_owned(),
                     "ke.k/".to_owned()
-                ]
-            ))
+                ],
+                command_arg: None
+            }
         );
     }
 }

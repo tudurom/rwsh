@@ -2,71 +2,103 @@ pub mod address;
 pub mod command;
 
 use super::skip_whitespace;
-use crate::sre::Command;
 use crate::util::{BufReadChars, LineReader, ParseError};
+use address::ComposedAddress;
 
-pub fn parse_command<'a, R: LineReader>(it: &mut BufReadChars<R>) -> Result<Command, ParseError> {
+#[derive(Debug, PartialEq, Clone)]
+pub struct Command {
+    address: ComposedAddress,
+    name: char,
+    string_args: Vec<String>,
+    command_arg: Option<Box<Command>>,
+}
+
+pub fn parse_command<R: LineReader>(it: &mut BufReadChars<R>) -> Result<Command, ParseError> {
     skip_whitespace(it);
     let address = match address::Parser::new(it)?.parse() {
         Ok(x) => x,
         Err(e) => return Err(it.new_error(e)),
     }
     .unwrap_or_default();
-    let simple = command::parse_simple_command(it)?;
-    Ok(Command::new(address, simple))
+    let simple = command::parse_command(it)?;
+    Ok(Command {
+        address,
+        name: simple.name,
+        string_args: simple.args,
+        command_arg: simple.command_arg,
+    })
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::parser::sre::address::{ComposedAddress, SimpleAddress};
     use crate::tests::common::new_dummy_buf;
     #[test]
     fn smoke() {
-        let mut buf = new_dummy_buf("/something /a/else/ ,p".lines());
-        // HACK: this is the easiest method i found to compare the damn trait objects
+        let mut buf = new_dummy_buf("/something /a/else/ ,p ,x/Emacs/ /{TM}/d".lines());
         assert_eq!(
-            format!("{:#?}", super::parse_command(&mut buf)),
-            "Ok(
-    Command {
-        address: ComposedAddress {
-            simple: Regex(
-                \"/something \",
-                false
-            ),
-            left: None,
-            next: None
-        },
-        simple: A(
-            \"else\"
-        )
-    }
-)"
+            super::parse_command(&mut buf).unwrap(),
+            super::Command {
+                address: ComposedAddress::new(
+                    SimpleAddress::Regex("/something ".to_owned(), false),
+                    None,
+                    None
+                ),
+                name: 'a',
+                string_args: vec!["else".to_owned()],
+                command_arg: None,
+            }
         );
         assert_eq!(
-            format!("{:#?}", super::parse_command(&mut buf)),
-            "Ok(
-    Command {
-        address: ComposedAddress {
-            simple: Comma,
-            left: Some(
-                ComposedAddress {
-                    simple: Line(
-                        0
+            super::parse_command(&mut buf).unwrap(),
+            super::Command {
+                address: ComposedAddress::new(
+                    SimpleAddress::Comma,
+                    Some(Box::new(ComposedAddress::new(
+                        SimpleAddress::Line(0),
+                        None,
+                        None
+                    ))),
+                    Some(Box::new(ComposedAddress::new(
+                        SimpleAddress::Dollar,
+                        None,
+                        None
+                    )))
+                ),
+                name: 'p',
+                string_args: vec![],
+                command_arg: None,
+            }
+        );
+        assert_eq!(
+            super::parse_command(&mut buf).unwrap(),
+            super::Command {
+                address: ComposedAddress::new(
+                    SimpleAddress::Comma,
+                    Some(Box::new(ComposedAddress::new(
+                        SimpleAddress::Line(0),
+                        None,
+                        None
+                    ))),
+                    Some(Box::new(ComposedAddress::new(
+                        SimpleAddress::Dollar,
+                        None,
+                        None
+                    )))
+                ),
+                name: 'x',
+                string_args: vec!["Emacs".to_owned()],
+                command_arg: Some(Box::new(super::Command {
+                    address: ComposedAddress::new(
+                        SimpleAddress::Regex("/{TM}".to_owned(), false),
+                        None,
+                        None
                     ),
-                    left: None,
-                    next: None
-                }
-            ),
-            next: Some(
-                ComposedAddress {
-                    simple: Dollar,
-                    left: None,
-                    next: None
-                }
-            )
-        },
-        simple: P
-    }
-)"
+                    name: 'd',
+                    string_args: vec![],
+                    command_arg: None
+                }))
+            }
         );
     }
 }

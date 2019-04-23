@@ -48,6 +48,12 @@ pub struct Command<'a> {
     simple: Box<dyn SimpleCommand<'a>>,
 }
 
+impl<'a> PartialEq for Command<'a> {
+    fn eq(&self, other: &Command) -> bool {
+        self.address == other.address && self.simple.to_tuple() == other.simple.to_tuple()
+    }
+}
+
 impl<'a> Command<'a> {
     pub fn new(address: ComposedAddress, simple: Box<dyn SimpleCommand<'a>>) -> Self {
         Command { address, simple }
