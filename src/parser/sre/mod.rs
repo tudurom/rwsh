@@ -16,6 +16,22 @@ pub struct Command {
     command_arg: Option<Box<Command>>,
 }
 
+impl Command {
+    pub fn new(
+        address: ComposedAddress,
+        name: char,
+        string_args: Vec<String>,
+        command_arg: Option<Box<Command>>,
+    ) -> Command {
+        Command {
+            address,
+            name,
+            string_args,
+            command_arg,
+        }
+    }
+}
+
 /// Parses the address and the simple command, returning a complete, ready-to-use command.
 pub fn parse_command<R: LineReader>(it: &mut BufReadChars<R>) -> Result<Command, ParseError> {
     skip_whitespace(it);

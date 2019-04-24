@@ -19,6 +19,7 @@ pub fn lex_address<R: LineReader>(it: &mut BufReadChars<R>) -> Result<Vec<Token>
     let mut v: Vec<Token> = Vec::new();
     while let Some(&c) = it.peek() {
         if c == '\n' || c == '|' {
+            // we either reached \n as a separator, or the pizza operator
             break;
         } else if c.is_whitespace() {
             scan_space(it);

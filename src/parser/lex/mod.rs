@@ -1,5 +1,6 @@
 pub mod sre;
 
+use super::sre::{parse_command, Command};
 use super::{escape, skip_whitespace};
 use crate::util::{BufReadChars, LineReader, ParseError};
 use sre::Token as SREToken;
@@ -11,7 +12,7 @@ pub enum TokenKind {
     /// The pipe (`|`) character.
     Pipe,
     /// A structural regular expression pipe (`|>`) and its SRE code
-    SREPipe(Vec<SREToken>),
+    Pizza(Command),
     /// A newline.
     Newline,
     /// A sequence of concatenated words.
@@ -21,13 +22,19 @@ pub enum TokenKind {
     WordString(char, String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 /// Structure representing a lexical token, together with its position in the file
 /// and its size.
 pub struct Token {
     pub kind: TokenKind,
     pub pos: (usize, usize),
     pub len: usize,
+}
+
+impl std::fmt::Debug for Token {
+    fn fmt(&self, w: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        write!(w, "Token({:?})", self.kind)
+    }
 }
 
 impl Token {
@@ -45,13 +52,19 @@ impl Token {
 #[derive(Clone)]
 pub struct Lexer<R: LineReader> {
     input: BufReadChars<R>,
+    pipe_follows: bool,
+    errored: bool,
 }
 
 impl<R: LineReader> Lexer<R> {
     /// Creates a new lexer based on a `char` iterator,
     /// usually a [`BufReadChars`](../../util/struct.BufReadChars.html).
     pub fn new(input: BufReadChars<R>) -> Lexer<R> {
-        Lexer { input }
+        Lexer {
+            input,
+            pipe_follows: false,
+            errored: false,
+        }
     }
 }
 
@@ -70,6 +83,22 @@ impl<R: LineReader> Iterator for Lexer<R> {
     type Item = Result<Token, ParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.errored {
+            return None;
+        }
+        if self.pipe_follows {
+            let peek = self.input.peek();
+            if let Some('|') | Some('\n') = peek {
+                self.pipe_follows = false;
+            } else if peek.is_some() && peek.unwrap().is_whitespace() {
+
+            } else {
+                self.errored = true;
+                return Some(Err(self
+                    .input
+                    .new_error("expected pipe, pizza or newline".to_owned())));
+            }
+        }
         if let Some(&c) = self.input.peek() {
             if is_clear_string_char(c) {
                 match read_string('\0', &mut self.input) {
@@ -78,7 +107,10 @@ impl<R: LineReader> Iterator for Lexer<R> {
                         s.len(),
                         self.input
                     ))),
-                    Err(e) => Some(Err(e)),
+                    Err(e) => {
+                        self.errored = true;
+                        Some(Err(e))
+                    }
                 }
             } else if c == '"' || c == '\'' {
                 self.input.next();
@@ -88,17 +120,28 @@ impl<R: LineReader> Iterator for Lexer<R> {
                         s.len() + 2,
                         self.input
                     ))),
-                    Err(e) => Some(Err(e)),
+                    Err(e) => {
+                        self.errored = true;
+                        Some(Err(e))
+                    }
                 }
             } else if c == '|' {
                 self.input.next();
-                /*
                 if let Some('>') = self.input.peek() {
                     self.input.next();
-                    return Some(Ok(Token::SREPipe));
+                    match parse_command(&mut self.input) {
+                        Ok(sre) => {
+                            self.pipe_follows = true;
+                            Some(Ok(tok!(TokenKind::Pizza(sre), 1, self.input)))
+                        }
+                        Err(e) => {
+                            self.errored = true;
+                            Some(Err(e))
+                        }
+                    }
+                } else {
+                    Some(Ok(tok!(TokenKind::Pipe, 1, self.input)))
                 }
-                */
-                Some(Ok(tok!(TokenKind::Pipe, 1, self.input)))
             } else if c == '\n' {
                 self.input.next();
                 Some(Ok(tok!(TokenKind::Newline, 0, self.input)))
@@ -106,6 +149,7 @@ impl<R: LineReader> Iterator for Lexer<R> {
                 let len = skip_whitespace(&mut self.input);
                 Some(Ok(tok!(TokenKind::Space, len, self.input)))
             } else {
+                self.errored = true;
                 Some(Err(self
                     .input
                     .new_error(format!("unexpected character {}", c))))
@@ -249,7 +293,11 @@ mod tests {
 
     #[test]
     fn lex() {
-        let s = "echo this\\ is\\ a test\". ignore \"'this 'please | cat\nmeow";
+        use crate::parser::sre::{
+            address::{ComposedAddress, SimpleAddress},
+            Command,
+        };
+        let s = "echo this\\ is\\ a test\". ignore \"'this 'please | cat\nmeow |> a/pizza/ | lolcat";
         let buf = new_dummy_buf(s.lines());
         macro_rules! tok {
             ($kind:expr) => {
@@ -276,6 +324,17 @@ mod tests {
             Ok(tok!(WordString('\u{0}', "cat".to_owned()))),
             Ok(tok!(Newline)),
             Ok(tok!(WordString('\u{0}', "meow".to_owned()))),
+            Ok(tok!(Space)),
+            Ok(tok!(Pizza(Command::new(
+                ComposedAddress::new(SimpleAddress::Dot, None, None),
+                'a',
+                vec!["pizza".to_owned()],
+                None
+            )))),
+            Ok(tok!(Space)),
+            Ok(tok!(Pipe)),
+            Ok(tok!(Space)),
+            Ok(tok!(WordString('\u{0}', "lolcat".to_owned()))),
             Ok(tok!(Newline)),
         ];
         let l = super::Lexer::new(buf);

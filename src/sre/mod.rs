@@ -1,5 +1,5 @@
 //! Operations and functionality for [structural regular expressions](http://doc.cat-v.org/bell_labs/structural_regexps/).
-//! 
+//!
 //! We will use the "SRE" abbreviation from now on.
 pub mod commands;
 
