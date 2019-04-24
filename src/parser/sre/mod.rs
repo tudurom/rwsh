@@ -1,3 +1,4 @@
+//! Parsing and lexing functions for the SRE sublanguage.
 pub mod address;
 pub mod command;
 
@@ -6,6 +7,8 @@ use crate::util::{BufReadChars, LineReader, ParseError};
 use address::ComposedAddress;
 
 #[derive(Debug, PartialEq, Clone)]
+/// A full SRE command, with an address, list of arguments and optional command argument.
+/// The command argument is for commands that act as conditionals or loops, such as `x` or `g`.
 pub struct Command {
     address: ComposedAddress,
     name: char,
@@ -13,6 +16,7 @@ pub struct Command {
     command_arg: Option<Box<Command>>,
 }
 
+/// Parses the address and the simple command, returning a complete, ready-to-use command.
 pub fn parse_command<R: LineReader>(it: &mut BufReadChars<R>) -> Result<Command, ParseError> {
     skip_whitespace(it);
     let address = match address::Parser::new(it)?.parse() {

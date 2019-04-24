@@ -1,3 +1,6 @@
+//! Operations and functionality for [structural regular expressions](http://doc.cat-v.org/bell_labs/structural_regexps/).
+//! 
+//! We will use the "SRE" abbreviation from now on.
 pub mod commands;
 
 use crate::parser::sre::address::ComposedAddress;
@@ -5,6 +8,9 @@ use std::collections::LinkedList;
 use std::io::{self, Read, Write};
 
 #[derive(Debug)]
+/// The buffer holds the text that we are operating on.
+///
+/// For the moment, it keeps the entire output of the piped command.
 pub struct Buffer {
     data: Vec<char>,
 }
@@ -20,6 +26,7 @@ impl Buffer {
         Ok(b)
     }
 
+    /// Returns a new address in this buffer.
     pub fn new_address(&self, l: usize, r: usize) -> Address {
         Address {
             r: Range(l, r),
@@ -29,29 +36,29 @@ impl Buffer {
 }
 
 #[derive(Copy, Clone)]
+/// A simple range. The left part is inclusive, the right part is exclusive.
+///
+/// An example would be `(3, 10) -> (3, 4, 5, 6, 7, 8, 9)`
 pub struct Range(usize, usize);
 
 #[derive(Copy, Clone)]
+/// An address is a chunk of a (struct.Buffer.html).
 pub struct Address<'a> {
     r: Range,
     buffer: &'a Buffer,
 }
 
+/// Defines an interface for text manipulation routines.
 pub trait SimpleCommand<'a>: std::fmt::Debug {
     fn execute(&self, w: &mut Write, dot: &'a Address) -> Vec<Address<'a>>;
     fn to_tuple(&self) -> (char, LinkedList<String>);
 }
 
 #[derive(Debug)]
+/// A SRE command that can be applied on a buffer.
 pub struct Command<'a> {
     address: ComposedAddress,
     simple: Box<dyn SimpleCommand<'a>>,
-}
-
-impl<'a> PartialEq for Command<'a> {
-    fn eq(&self, other: &Command) -> bool {
-        self.address == other.address && self.simple.to_tuple() == other.simple.to_tuple()
-    }
 }
 
 impl<'a> Command<'a> {

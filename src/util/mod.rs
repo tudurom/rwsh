@@ -1,11 +1,12 @@
-pub mod process;
-
+//! Provides functions and types that are used throughout the codebase.
 use std::error::Error;
 use std::fmt;
 use std::io::{self, stdin, stdout, Write};
 use std::iter::Iterator;
 
 #[derive(Debug, Clone)]
+/// ParseError is a kind of error that appears while parsing.
+/// It is used to report the position in the buffer to aid in debugging.
 pub struct ParseError {
     pub message: String,
     pub line: usize,
@@ -127,10 +128,14 @@ impl<R: LineReader> BufReadChars<R> {
         }
     }
 
+    /// Returns the position in the buffer as a tuple.
+    /// The first element is the line, the second is the column.
+    /// It is mostly used for reporting errors with [`ParseError`](struct.ParseError.html).
     pub fn get_pos(&self) -> (usize, usize) {
         (self.line, self.col)
     }
 
+    /// Returns a new error based on the current position in the buffer.
     pub fn new_error(&self, message: String) -> ParseError {
         ParseError {
             line: self.line,
@@ -139,6 +144,7 @@ impl<R: LineReader> BufReadChars<R> {
         }
     }
 
+    /// Returns the current character without advancing.
     pub fn peek(&mut self) -> Option<&<Self as Iterator>::Item> {
         if self.peeked.is_none() {
             self.peeked = Some(self.next());

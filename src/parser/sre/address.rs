@@ -5,6 +5,8 @@ use std::iter::Peekable;
 use std::vec::IntoIter;
 
 #[derive(Debug, Clone, PartialEq)]
+/// A simple address, by the definition from sam(1).
+/// These are the basis of the compound addresses.
 pub enum SimpleAddress {
     Nothing,
     Char(usize),
@@ -25,7 +27,15 @@ impl Default for SimpleAddress {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct Address {
+/// The internal representation of a compound address.
+///
+/// This is basically a very weird double-linked list.
+/// To get away from Rust's bitey teeth, we are doing some
+/// manual management of the list's nodes.
+/// `left` and `right` are indices in a vec with all our nodes.
+///
+/// This structure will be transformed in the end in a [`ComposedAddress`](struct.ComposedAddress.html).
+struct Address {
     simple: SimpleAddress,
     left: Option<usize>,
     next: Option<usize>,
@@ -42,11 +52,14 @@ impl Address {
 }
 
 #[derive(Default)]
-pub struct AddressSet {
+/// This holds all the [`Address`es](struct.Address.html) that we use to build the final
+/// [`ComposedAddress`](struct.ComposedAddress.html).
+struct AddressSet {
     vec: RefCell<Vec<Address>>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
+/// A ready-to-use structural regular expression address.
 pub struct ComposedAddress {
     simple: SimpleAddress,
     left: Option<Box<ComposedAddress>>,
@@ -74,26 +87,26 @@ impl ComposedAddress {
 }
 
 impl AddressSet {
-    pub fn new() -> AddressSet {
+    fn new() -> AddressSet {
         AddressSet {
             vec: RefCell::new(vec![]),
         }
     }
 
-    pub fn add(&self, addr: Address) -> usize {
+    fn add(&self, addr: Address) -> usize {
         self.vec.borrow_mut().push(addr);
         self.vec.borrow().len() - 1
     }
 
-    pub fn replace(&self, i: usize, addr: Address) {
+    fn replace(&self, i: usize, addr: Address) {
         self.vec.borrow_mut()[i] = addr;
     }
 
-    pub fn get(&self, i: usize) -> Address {
+    fn get(&self, i: usize) -> Address {
         self.vec.borrow()[i].clone()
     }
 
-    pub fn compose(&self, i: usize) -> ComposedAddress {
+    fn compose(&self, i: usize) -> ComposedAddress {
         let addr = self.get(i);
         ComposedAddress {
             simple: addr.simple,

@@ -1,3 +1,4 @@
+//! The parsers and lexers of the `rwsh` scripting language and its SRE sublanguage.
 pub mod lex;
 pub mod sre;
 

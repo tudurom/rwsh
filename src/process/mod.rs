@@ -1,3 +1,4 @@
+//! Utility functions for executing processes with pipes.
 use nix;
 use nix::sys::wait;
 use nix::unistd::{self, ForkResult, Pid};
@@ -7,13 +8,16 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::RawFd;
 use std::process::exit;
 
+/// A child process with its ID and `stdout` file descriptor
 pub struct Child {
     pub pid: Pid,
+    /// The child's `stdout` file descriptor.
     pub output: RawFd,
 }
 
 impl Child {
-    pub fn wait(&self) -> Result<(), nix::Error> {
+    /// Waits for the child to terminate.
+    pub fn wait(&self) -> nix::Result<()> {
         wait::waitpid(self.pid, None)?;
         Ok(())
     }
@@ -23,7 +27,17 @@ fn os2c(s: &OsStr) -> CString {
     CString::new(s.as_bytes()).unwrap_or_else(|_e| CString::new("<string-with-nul>").unwrap())
 }
 
-pub fn exec<I, S, A>(prog: S, args: I) -> impl FnOnce() -> Result<(), nix::Error>
+/// Provides a function that can be used as a process body for [`run_command`](fn.run_command.html) to execute external programs.
+///
+/// # Example
+///
+/// The following examples prints the text "Hello, world!" to `stdout` using the `echo` command:
+///
+/// ```rust
+/// use rwsh::process::*;
+/// run_command::<_, nix::Error>(exec("echo", vec!["Hello, world!"]), 0, true, true);
+/// ```
+pub fn exec<I, S, A>(prog: S, args: I) -> impl FnOnce() -> nix::Result<()>
 where
     S: AsRef<OsStr>,
     A: AsRef<OsStr>,
@@ -40,6 +54,18 @@ where
     }
 }
 
+/// Runs the code of the function `body` inside a new process that is eventualy piped to another.
+///
+/// # Example
+///
+/// ```rust
+/// use rwsh::process::run_command;
+///
+/// run_command::<_, nix::Error>(move || {
+///     println!("Hello, world!");
+///     Ok(())
+/// }, 0, true, true);
+/// ```
 pub fn run_command<F, E>(body: F, input: RawFd, first: bool, last: bool) -> nix::Result<Child>
 where
     F: FnOnce() -> Result<(), E>,

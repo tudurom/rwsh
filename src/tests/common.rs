@@ -1,3 +1,4 @@
+//! Convenient functions and types for tests.
 use crate::util::{BufReadChars, LineReader};
 use std::io;
 use std::str::Lines;

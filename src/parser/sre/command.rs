@@ -5,9 +5,12 @@ use crate::util::{BufReadChars, LineReader, ParseError};
 fn arg_nr(name: char) -> i8 {
     match name {
         'p' => 0,
-        'a' => 1,
+
+        'a' | 'c' | 'i' => 1,
         'd' => 0,
-        'x' => 1,
+
+        'g' | 'v' => 1,
+        'x' | 'y' => 1,
 
         'Z' => 3, // for debugging
         _ => -1,
@@ -15,7 +18,7 @@ fn arg_nr(name: char) -> i8 {
 }
 
 fn has_command_argument(name: char) -> bool {
-    let s = ['x'];
+    let s = ['g', 'v', 'x', 'y'];
     s.binary_search(&name).is_ok()
 }
 
@@ -48,12 +51,16 @@ fn read_arg<R: LineReader>(it: &mut BufReadChars<R>) -> Result<String, ParseErro
 }
 
 #[derive(Debug, PartialEq)]
+/// A simple command is a command without any address.
+/// It has a list of slash-delimited arguments and an optional command argument, for commands such as `x` and `g`,
+/// that do an action (the command) based on a condition.
 pub struct SimpleCommand {
     pub name: char,
     pub args: Vec<String>,
     pub command_arg: Option<Box<Command>>,
 }
 
+/// Parses the whole command. If the command accepts a command argument, the argument is recursively parsed too.
 pub fn parse_command<R: LineReader>(it: &mut BufReadChars<R>) -> Result<SimpleCommand, ParseError> {
     skip_whitespace(it);
     let chr = it.next();

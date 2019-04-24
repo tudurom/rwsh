@@ -1,3 +1,4 @@
+//! Implementations of SRE commands.
 use super::*;
 use std::io::Write;
 

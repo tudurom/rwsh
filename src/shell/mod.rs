@@ -1,5 +1,5 @@
 use crate::parser::{Parser, Pipeline};
-use crate::util::process::{self, Child};
+use crate::process::{self, Child};
 use crate::util::{BufReadChars, InteractiveLineReader, LineReader};
 use nix::unistd;
 use std::env;

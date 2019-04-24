@@ -22,6 +22,8 @@ pub enum TokenKind {
 }
 
 #[derive(Debug, Clone)]
+/// Structure representing a lexical token, together with its position in the file
+/// and its size.
 pub struct Token {
     pub kind: TokenKind,
     pub pos: (usize, usize),
@@ -29,18 +31,13 @@ pub struct Token {
 }
 
 impl Token {
+    /// Returns a new [`ParseError`](../../util/struct.ParseError.html) based on the token's position.
     pub fn new_error(&self, message: String) -> ParseError {
         ParseError {
             line: self.pos.0,
             col: self.pos.1,
             message,
         }
-    }
-}
-
-impl PartialEq<Token> for Token {
-    fn eq(&self, other: &Token) -> bool {
-        self.kind == other.kind
     }
 }
 
@@ -182,6 +179,12 @@ mod tests {
     use super::TokenKind::*;
     use crate::tests::common::new_dummy_buf;
     use crate::util::ParseError;
+
+    impl PartialEq<Token> for Token {
+        fn eq(&self, other: &Token) -> bool {
+            self.kind == other.kind
+        }
+    }
 
     #[test]
     fn read_string_no_quotes() {
