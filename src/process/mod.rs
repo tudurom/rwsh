@@ -2,12 +2,12 @@
 use nix;
 use nix::sys::wait;
 use nix::unistd::{self, ForkResult, Pid};
-use std::error::Error;
 use std::ffi::{CString, OsStr};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::RawFd;
 use std::process::exit;
 
+#[derive(Clone, Copy)]
 /// A child process with its ID and `stdout` file descriptor
 pub struct Child {
     pub pid: Pid,
@@ -17,7 +17,7 @@ pub struct Child {
 
 impl Child {
     /// Waits for the child to terminate.
-    pub fn wait(&self) -> nix::Result<()> {
+    pub fn wait(self) -> nix::Result<()> {
         wait::waitpid(self.pid, None)?;
         Ok(())
     }
@@ -35,9 +35,9 @@ fn os2c(s: &OsStr) -> CString {
 ///
 /// ```rust
 /// use rwsh::process::*;
-/// run_command::<_, nix::Error>(exec("echo", vec!["Hello, world!"]), 0, true, true);
+/// run_command(exec("echo", vec!["Hello, world!"]), 0, true, true);
 /// ```
-pub fn exec<I, S, A>(prog: S, args: I) -> impl FnOnce() -> nix::Result<()>
+pub fn exec<I, S, A>(prog: S, args: I) -> impl FnOnce()
 where
     S: AsRef<OsStr>,
     A: AsRef<OsStr>,
@@ -49,8 +49,7 @@ where
         c_args.push(os2c(arg.as_ref()));
     }
     move || {
-        unistd::execvp(&c_args[0], &c_args)?;
-        Ok(())
+        unistd::execvp(&c_args[0], &c_args).unwrap();
     }
 }
 
@@ -61,18 +60,16 @@ where
 /// ```rust
 /// use rwsh::process::run_command;
 ///
-/// run_command::<_, nix::Error>(move || {
+/// run_command(move || {
 ///     println!("Hello, world!");
-///     Ok(())
 /// }, 0, true, true);
 /// ```
-pub fn run_command<F, E>(body: F, input: RawFd, first: bool, last: bool) -> nix::Result<Child>
+pub fn run_command<F>(body: F, input: RawFd, first: bool, last: bool) -> nix::Result<Child>
 where
-    F: FnOnce() -> Result<(), E>,
-    E: Error,
+    F: FnOnce(),
 {
     let (read_pipe, write_pipe) = unistd::pipe()?;
-    let mut pid: Pid = Pid::this();
+    let pid: Pid;
 
     match unistd::fork()? {
         ForkResult::Parent { child, .. } => pid = child,
@@ -86,9 +83,8 @@ where
                 unistd::dup2(input, 0)?;
             }
 
-            if body().is_err() {
-                exit(1);
-            }
+            body();
+            exit(0);
         }
     }
 
@@ -105,4 +101,48 @@ where
         pid,
         output: read_pipe,
     })
+}
+
+/// Helper for executing processes sequencially while piped.
+pub struct PipeRunner {
+    previous_command: Option<Child>,
+    len: usize,
+    i: usize,
+}
+
+impl PipeRunner {
+    /// Creates a new, empty instance.
+    pub fn new(len: usize) -> PipeRunner {
+        PipeRunner {
+            previous_command: None,
+            len,
+            i: 0,
+        }
+    }
+
+    /// Runs the given `body` in a new process, piped to the previous one.
+    ///
+    /// If this is the first invocation, `stdin` will be the terminal's.
+    /// If this is the last invocation, `stdout` will be the terminal's.
+    pub fn run(&mut self, body: impl FnOnce()) -> nix::Result<Child> {
+        let stdin = self
+            .previous_command
+            .map_or(0, |output: Child| output.output);
+
+        self.previous_command = Some(run_command(
+            body,
+            stdin,
+            self.i == 0,
+            self.i == self.len - 1,
+        )?);
+        Ok(self.previous_command.unwrap())
+    }
+
+    /// Waits for the last process to terminate.
+    pub fn wait(&self) -> nix::Result<()> {
+        if let Some(final_command) = self.previous_command {
+            final_command.wait()?;
+        }
+        Ok(())
+    }
 }

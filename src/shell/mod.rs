@@ -1,5 +1,5 @@
-use crate::parser::{Parser, Pipeline};
-use crate::process::{self, Child};
+use crate::parser::{Parser, Pipeline, Task};
+use crate::process::{self, PipeRunner};
 use crate::util::{BufReadChars, InteractiveLineReader, LineReader};
 use nix::unistd;
 use std::env;
@@ -63,37 +63,31 @@ impl<R: LineReader> Shell<R> {
 
     /// Runs a [Pipeline](../parser/struct.Pipeline.html)
     fn run_pipeline(p: Pipeline) -> Result<(), String> {
-        let mut previous_command = None;
-        let len = p.0.len();
-        for (i, command) in p.0.iter().enumerate() {
-            match &command.0 as &str {
-                "cd" => {
-                    return Self::do_cd(command.1.iter().map(|x| &x[..]));
-                }
-                name => {
-                    let stdin = previous_command.map_or(0, |output: Child| output.output);
-
-                    match process::run_command(
-                        process::exec(name, command.1.iter()),
-                        stdin,
-                        i == 0,
-                        i == len - 1,
-                    ) {
-                        Ok(child) => {
-                            previous_command = Some(child);
-                        }
-                        Err(e) => {
+        let mut runner = PipeRunner::new(p.0.len());
+        for task in p.0.iter() {
+            match task {
+                Task::Command(command) => match &command.0 as &str {
+                    "cd" => {
+                        return Self::do_cd(command.1.iter().map(|x| &x[..]));
+                    }
+                    name => {
+                        if let Err(e) = runner.run(process::exec(name, command.1.iter())) {
                             return Err(format!("rwsh: {}", e));
                         }
                     }
+                },
+                Task::SREProgram(_) => {
+                    runner
+                        .run(move || {
+                            println!("Hello, world!");
+                        })
+                        .unwrap();
                 }
             }
         }
 
-        if let Some(final_command) = previous_command {
-            if let Err(e) = final_command.wait() {
-                return Err(format!("rwsh: {}", e));
-            }
+        if let Err(e) = runner.wait() {
+            return Err(format!("rwsh: {}", e));
         }
         Ok(())
     }

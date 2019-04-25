@@ -4,6 +4,7 @@ pub mod sre;
 
 use self::lex::{Lexer, Token};
 use crate::util::{BufReadChars, LineReader, ParseError};
+use sre::Command as SRECommand;
 use std::cell::RefCell;
 use std::iter::Peekable;
 
@@ -33,16 +34,17 @@ pub fn escape(c: char) -> char {
 #[derive(Debug, PartialEq)]
 pub struct Command(pub String, pub Vec<String>);
 
-/*
+/// A chain of [`Task`s](struct.Task.html) piped together
+#[derive(Debug, PartialEq)]
+pub struct Pipeline(pub Vec<Task>);
+
+#[derive(Debug, PartialEq)]
+/// A task is something that will be executed in a pipeline in a process,
+/// either an external command, or a SRE program.
 pub enum Task {
     Command(Command),
-    SREProgram(SREProgram),
+    SREProgram(SRECommand),
 }
-*/
-
-/// A chain of [`Command`s](struct.Command.html) piped together
-#[derive(Debug, PartialEq)]
-pub struct Pipeline(pub Vec<Command>);
 
 /// Parses the series of [`Token`s](./lex/enum.Token.html) to the AST ([`ParseNode`s](enum.ParseNode.html)).
 #[derive(Clone)]
@@ -84,9 +86,9 @@ impl<R: LineReader> Parser<R> {
     /// Here, there are two commands, `dmesg` and `lolcat`, piped together.
     fn parse_pipeline(&mut self) -> Option<Result<Pipeline, ParseError>> {
         // the grammar is pipeline ::= command pipeline | command
-        match self.parse_command() {
-            Some(Ok(c)) => {
-                let mut v: Vec<Command> = vec![c];
+        match self.parse_task() {
+            Some(Ok(t)) => {
+                let mut v = vec![t];
                 match self.peek() {
                     Some(Ok(lex::Token {
                         kind: lex::TokenKind::Newline,
@@ -99,8 +101,20 @@ impl<R: LineReader> Parser<R> {
                             kind: lex::TokenKind::Pipe,
                             ..
                         },
+                    ))
+                    | Some(Ok(
+                        ref tok @ lex::Token {
+                            kind: lex::TokenKind::Pizza(_),
+                            ..
+                        },
                     )) => {
-                        self.next_tok();
+                        if let Some(Ok(lex::Token {
+                            kind: lex::TokenKind::Pipe,
+                            ..
+                        })) = self.peek()
+                        {
+                            self.next_tok();
+                        }
                         match self.parse_pipeline() {
                             Some(Ok(Pipeline(ref mut new_v))) => {
                                 v.append(new_v);
@@ -129,6 +143,26 @@ impl<R: LineReader> Parser<R> {
             }
             Some(Err(e)) => Some(Err(e.clone())),
             None => None,
+        }
+    }
+
+    fn parse_task(&mut self) -> Option<Result<Task, ParseError>> {
+        self.skip_space(false);
+        match self.peek() {
+            Some(Ok(lex::Token {
+                kind: lex::TokenKind::Pizza(sre),
+                ..
+            })) => {
+                self.next_tok();
+                self.skip_space(true);
+                Some(Ok(Task::SREProgram(sre)))
+            }
+            Some(Ok(lex::Token {
+                kind: lex::TokenKind::WordString(_, _),
+                ..
+            })) => self.parse_command().map(|r| r.map(Task::Command)),
+            None => None,
+            _ => panic!(),
         }
     }
 
@@ -179,7 +213,7 @@ impl<R: LineReader> Parser<R> {
             None => None,
         }
     }
-    fn skip_space(&mut self) -> usize {
+    fn skip_space(&mut self, break_at_newline: bool) -> usize {
         let mut len: usize = 0;
         while let Some(Ok(lex::Token {
             kind: lex::TokenKind::Space,
@@ -192,6 +226,9 @@ impl<R: LineReader> Parser<R> {
             ..
         })) = self.peek()
         {
+            if break_at_newline && self.peek().unwrap().unwrap().kind == lex::TokenKind::Newline {
+                return len;
+            }
             len += l;
             self.next_tok();
         }
@@ -199,7 +236,7 @@ impl<R: LineReader> Parser<R> {
     }
     fn parse_word_list(&mut self) -> Option<Result<String, ParseError>> {
         let mut r = String::new();
-        self.skip_space();
+        self.skip_space(false);
         match self.peek() {
             Some(Ok(lex::Token {
                 kind: lex::TokenKind::WordString(_, _),
@@ -245,7 +282,7 @@ impl<R: LineReader> Iterator for Parser<R> {
 
 #[cfg(test)]
 pub mod tests {
-    use super::{Command, Pipeline};
+    use super::{Command, Pipeline, Task};
     use crate::tests::common::new_dummy_buf;
     use crate::util::ParseError;
 
@@ -274,15 +311,16 @@ pub mod tests {
         let s = "   dmesg --facility daemon| lolcat |   cat -v  \n\nmeow\n"; // useless use of cat!
         let mut p = super::Parser::new(new_dummy_buf(s.lines()));
         let ok1: Option<Result<Pipeline, ParseError>> = Some(Ok(Pipeline(vec![
-            Command(
+            Task::Command(Command(
                 "dmesg".to_owned(),
                 vec!["--facility".to_owned(), "daemon".to_owned()],
-            ),
-            Command("lolcat".to_owned(), vec![]),
-            Command("cat".to_owned(), vec!["-v".to_owned()]),
+            )),
+            Task::Command(Command("lolcat".to_owned(), vec![])),
+            Task::Command(Command("cat".to_owned(), vec!["-v".to_owned()])),
         ])));
-        let ok2: Option<Result<Pipeline, ParseError>> =
-            Some(Ok(Pipeline(vec![Command("meow".to_owned(), vec![])])));
+        let ok2: Option<Result<Pipeline, ParseError>> = Some(Ok(Pipeline(vec![Task::Command(
+            Command("meow".to_owned(), vec![]),
+        )])));
         assert_eq!(p.parse_pipeline(), ok1);
         assert_eq!(p.parse_pipeline(), ok2);
     }

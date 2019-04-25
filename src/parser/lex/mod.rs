@@ -3,7 +3,6 @@ pub mod sre;
 use super::sre::{parse_command, Command};
 use super::{escape, skip_whitespace};
 use crate::util::{BufReadChars, LineReader, ParseError};
-use sre::Token as SREToken;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
@@ -297,7 +296,8 @@ mod tests {
             address::{ComposedAddress, SimpleAddress},
             Command,
         };
-        let s = "echo this\\ is\\ a test\". ignore \"'this 'please | cat\nmeow |> a/pizza/ | lolcat";
+        let s =
+            "echo this\\ is\\ a test\". ignore \"'this 'please | cat\nmeow |> a/pizza/ | lolcat";
         let buf = new_dummy_buf(s.lines());
         macro_rules! tok {
             ($kind:expr) => {
