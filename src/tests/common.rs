@@ -1,4 +1,6 @@
 //! Convenient functions and types for tests.
+use crate::parser::sre::address::{ComposedAddress, Parser};
+use crate::sre::Buffer;
 use crate::util::{BufReadChars, LineReader};
 use std::io;
 use std::str::Lines;
@@ -21,4 +23,13 @@ impl<'a> LineReader for DummyLineReader<'a> {
 
 pub fn new_dummy_buf(l: Lines) -> BufReadChars<DummyLineReader> {
     BufReadChars::new(DummyLineReader(l))
+}
+
+pub fn new_composed_address(addr: &'static str) -> ComposedAddress {
+    let mut buf = new_dummy_buf(addr.lines());
+    Parser::new(&mut buf).unwrap().parse().unwrap().unwrap()
+}
+
+pub fn new_buffer(text: &'static str) -> Buffer {
+    Buffer::new(text.as_bytes()).unwrap()
 }

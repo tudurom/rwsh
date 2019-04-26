@@ -135,6 +135,7 @@ impl PipeRunner {
             self.i == 0,
             self.i == self.len - 1,
         )?);
+        self.i += 1;
         Ok(self.previous_command.unwrap())
     }
 

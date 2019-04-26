@@ -162,6 +162,7 @@ impl<R: LineReader> Parser<R> {
                 ..
             })) => self.parse_command().map(|r| r.map(Task::Command)),
             None => None,
+            Some(Err(e)) => Some(Err(e)),
             _ => panic!(),
         }
     }

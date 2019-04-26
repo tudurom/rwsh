@@ -10,10 +10,10 @@ use address::ComposedAddress;
 /// A full SRE command, with an address, list of arguments and optional command argument.
 /// The command argument is for commands that act as conditionals or loops, such as `x` or `g`.
 pub struct Command {
-    address: ComposedAddress,
-    name: char,
-    string_args: Vec<String>,
-    command_arg: Option<Box<Command>>,
+    pub address: ComposedAddress,
+    pub name: char,
+    pub string_args: Vec<String>,
+    pub command_arg: Option<Box<Command>>,
 }
 
 impl Command {

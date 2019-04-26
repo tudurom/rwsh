@@ -1,8 +1,10 @@
 use crate::parser::{Parser, Pipeline, Task};
 use crate::process::{self, PipeRunner};
+use crate::sre::{address::Address, commands, Buffer, SimpleCommand};
 use crate::util::{BufReadChars, InteractiveLineReader, LineReader};
 use nix::unistd;
 use std::env;
+use std::io::{stdin, stdout};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
@@ -76,10 +78,19 @@ impl<R: LineReader> Shell<R> {
                         }
                     }
                 },
-                Task::SREProgram(_) => {
+                Task::SREProgram(ref p) => {
                     runner
                         .run(move || {
-                            println!("Hello, world!");
+                            let buf = Buffer::new(stdin()).unwrap();
+                            let addr = Address::new(&buf).address(p.clone().address).unwrap();
+                            let command = match p.name {
+                                'p' => commands::P,
+                                _ => unimplemented!(),
+                            };
+                            let mut out = Box::new(stdout());
+                            command.execute(&mut out, &addr);
+                            use std::io::Write;
+                            out.flush().unwrap();
                         })
                         .unwrap();
                 }

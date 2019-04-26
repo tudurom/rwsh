@@ -2,10 +2,8 @@
 use super::*;
 use std::io::Write;
 
-fn p(w: &mut Write, chars: &[char]) {
-    for c in chars {
-        write!(w, "{}", c).unwrap();
-    }
+fn p(w: &mut Write, s: &str) {
+    write!(w, "{}", s);
 }
 
 #[derive(Debug, PartialEq)]

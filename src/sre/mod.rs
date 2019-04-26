@@ -1,9 +1,11 @@
 //! Operations and functionality for [structural regular expressions](http://doc.cat-v.org/bell_labs/structural_regexps/).
 //!
 //! We will use the "SRE" abbreviation from now on.
+pub mod address;
 pub mod commands;
 
 use crate::parser::sre::address::ComposedAddress;
+use address::Address;
 use std::collections::LinkedList;
 use std::io::{self, Read, Write};
 
@@ -12,18 +14,14 @@ use std::io::{self, Read, Write};
 ///
 /// For the moment, it keeps the entire output of the piped command.
 pub struct Buffer {
-    data: Vec<char>,
+    data: String,
 }
 
 impl Buffer {
     pub fn new(mut r: impl Read) -> io::Result<Buffer> {
         let mut s = String::new();
-        let mut b = Buffer { data: vec![] };
         r.read_to_string(&mut s)?;
-        for c in s.chars() {
-            b.data.push(c);
-        }
-        Ok(b)
+        Ok(Buffer { data: s })
     }
 
     /// Returns a new address in this buffer.
@@ -35,18 +33,11 @@ impl Buffer {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 /// A simple range. The left part is inclusive, the right part is exclusive.
 ///
 /// An example would be `(3, 10) -> (3, 4, 5, 6, 7, 8, 9)`
 pub struct Range(usize, usize);
-
-#[derive(Copy, Clone)]
-/// An address is a chunk of a (struct.Buffer.html).
-pub struct Address<'a> {
-    r: Range,
-    buffer: &'a Buffer,
-}
 
 /// Defines an interface for text manipulation routines.
 pub trait SimpleCommand<'a>: std::fmt::Debug {
@@ -72,6 +63,6 @@ mod tests {
     #[test]
     fn open_buffer() {
         let b = super::Buffer::new("xd lol".as_bytes()).unwrap();
-        assert_eq!(b.data, "xd lol".chars().collect::<Vec<char>>());
+        assert_eq!(b.data, "xd lol");
     }
 }

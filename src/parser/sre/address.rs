@@ -61,9 +61,9 @@ struct AddressSet {
 #[derive(Debug, PartialEq, Clone)]
 /// A ready-to-use structural regular expression address.
 pub struct ComposedAddress {
-    simple: SimpleAddress,
-    left: Option<Box<ComposedAddress>>,
-    next: Option<Box<ComposedAddress>>,
+    pub simple: SimpleAddress,
+    pub left: Option<Box<ComposedAddress>>,
+    pub next: Option<Box<ComposedAddress>>,
 }
 
 impl Default for ComposedAddress {
