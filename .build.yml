@@ -1,0 +1,13 @@
+image: archlinux
+packages:
+  - rustup
+sources: https://git.sr.ht/~tudor/rwsh
+tasks:
+  - setup: |
+      rustup install stable
+      rustup default stable
+      export RUST_BACKTRACE=full
+  - build: |
+      cd rwsh
+      cargo build --verbose
+      cargo test --verbose
