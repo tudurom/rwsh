@@ -1,4 +1,6 @@
-# rwsh
+# rwsh 
+
+[![builds.sr.ht status](https://builds.sr.ht/~tudor/rwsh.svg)](https://builds.sr.ht/~tudor/rwsh?)
 
 *(Better name ideas pending)*
 
