@@ -1,7 +1,8 @@
 image: archlinux
 packages:
   - rustup
-sources: https://git.sr.ht/~tudor/rwsh
+sources:
+  - https://git.sr.ht/~tudor/rwsh
 tasks:
   - setup: |
       rustup install stable
