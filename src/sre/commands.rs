@@ -3,7 +3,7 @@ use super::*;
 use std::io::Write;
 
 fn p(w: &mut Write, s: &str) {
-    write!(w, "{}", s);
+    write!(w, "{}", s).unwrap();
 }
 
 #[derive(Debug, PartialEq)]

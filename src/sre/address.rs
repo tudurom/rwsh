@@ -39,14 +39,14 @@ impl<'a> Address<'a> {
     }
 
     pub fn address(self, ca: ComposedAddress) -> Result<Self, AddressResolveError> {
-        self.resolveAddress(Some(ca), 0)
+        self.resolve_address(Some(ca), 0)
     }
 
-    fn lineAddress(self, line: usize, sign: i32) -> Result<Self, AddressResolveError> {
+    fn line_address(self, line: usize, sign: i32) -> Result<Self, AddressResolveError> {
         let mut a = Address::new(self.buffer);
 
-        let mut p = 0;
-        let mut n = 0;
+        let mut p;
+        let mut n;
 
         if sign >= 0 {
             if line == 0 {
@@ -70,7 +70,7 @@ impl<'a> Address<'a> {
                 } else {
                     p = self.r.1 - 1;
                     // skip it if we are just at the start of the line
-                    if self.buffer.data.as_bytes()[p] == '\n' as u8 {
+                    if self.buffer.data.as_bytes()[p] == b'\n' {
                         n = 1;
                     } else {
                         n = 0;
@@ -82,7 +82,7 @@ impl<'a> Address<'a> {
                     if p >= self.buffer.data.len() {
                         return Err(AddressResolveError::OutOfRange);
                     }
-                    if self.buffer.data.as_bytes()[p] == '\n' as u8 {
+                    if self.buffer.data.as_bytes()[p] == b'\n' {
                         n += 1;
                     }
                     p += 1;
@@ -91,7 +91,7 @@ impl<'a> Address<'a> {
                 a.r.0 = p;
             }
             // find the end of the line
-            while p < self.buffer.data.len() && self.buffer.data.as_bytes()[p] != '\n' as u8 {
+            while p < self.buffer.data.len() && self.buffer.data.as_bytes()[p] != b'\n' {
                 p += 1;
             }
             a.r.1 = p;
@@ -117,10 +117,10 @@ impl<'a> Address<'a> {
                         }
                     } else {
                         let c = self.buffer.data.as_bytes()[p - 1];
-                        if c != '\n' as u8 || n + 1 != line {
+                        if c != b'\n' || n + 1 != line {
                             p -= 1;
                         }
-                        if c == '\n' as u8 {
+                        if c == b'\n' {
                             n += 1;
                         }
                     }
@@ -131,7 +131,7 @@ impl<'a> Address<'a> {
                 }
             }
             // lines start after a newline
-            while p > 0 && self.buffer.data.as_bytes()[p - 1] != '\n' as u8 {
+            while p > 0 && self.buffer.data.as_bytes()[p - 1] != b'\n' {
                 p -= 1;
             }
             a.r.0 = p;
@@ -140,7 +140,7 @@ impl<'a> Address<'a> {
         Ok(a)
     }
 
-    fn charAddress(mut self, pos: usize, sign: i32) -> Result<Self, AddressResolveError> {
+    fn char_address(mut self, pos: usize, sign: i32) -> Result<Self, AddressResolveError> {
         if sign == 0 {
             self.r = Range(pos, pos);
         } else if sign < 0 {
@@ -160,7 +160,7 @@ impl<'a> Address<'a> {
         }
     }
 
-    fn regexAddress(self, re: &str, sign: i32) -> Result<Self, AddressResolveError> {
+    fn regex_address(self, re: &str, sign: i32) -> Result<Self, AddressResolveError> {
         let mut loc;
         let mut l: usize;
         let re = match regex::Regex::new(re) {
@@ -214,35 +214,35 @@ impl<'a> Address<'a> {
         })
     }
 
-    fn resolveAddress(
+    fn resolve_address(
         mut self,
         mut ca: Option<ComposedAddress>,
         mut sign: i32,
     ) -> Result<Self, AddressResolveError> {
         while let Some(a) = ca {
             match a.simple {
-                SimpleAddress::Line(l) => self = self.lineAddress(l, sign)?,
-                SimpleAddress::Char(c) => self = self.charAddress(c, sign)?,
+                SimpleAddress::Line(l) => self = self.line_address(l, sign)?,
+                SimpleAddress::Char(c) => self = self.char_address(c, sign)?,
                 SimpleAddress::Dollar => {
                     self.r = Range(self.buffer.data.len(), self.buffer.data.len())
                 }
                 SimpleAddress::Dot => {}
                 SimpleAddress::Regex(re, true) => {
                     let sign = if sign == 0 { -1 } else { -sign };
-                    self = self.regexAddress(&re[1..], sign)?;
+                    self = self.regex_address(&re[1..], sign)?;
                 }
-                SimpleAddress::Regex(re, false) => self = self.regexAddress(&re[1..], sign)?,
+                SimpleAddress::Regex(re, false) => self = self.regex_address(&re[1..], sign)?,
                 SimpleAddress::Comma | SimpleAddress::Semicolon => {
                     let mut a1: Address = Address::new(self.buffer);
                     let mut a2: Address = Address::new(self.buffer);
                     if a.left.is_some() {
-                        a1 = self.resolveAddress(a.left.map(|x| *x), sign)?;
+                        a1 = self.resolve_address(a.left.map(|x| *x), sign)?;
                     } else {
                         a1.buffer = self.buffer;
                         a1.r = Range(0, 0);
                     }
                     if a.next.is_some() {
-                        a2 = self.resolveAddress(a.next.map(|x| *x), sign)?;
+                        a2 = self.resolve_address(a.next.map(|x| *x), sign)?;
                     } else {
                         a2.buffer = self.buffer;
                         a2.r = Range(self.buffer.data.len(), self.buffer.data.len());
