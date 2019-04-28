@@ -1,6 +1,6 @@
 image: archlinux
 secrets:
-  - 46f739e5-4538-45dd-a79f-bf173b7a2ed9
+  - 820d708b-337f-4ab6-9a33-b9c4d1469b57
 packages:
   - rustup
 sources:
