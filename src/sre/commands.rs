@@ -1,19 +1,20 @@
 //! Implementations of SRE commands.
 use super::*;
 use std::io::Write;
+use std::str::FromStr;
 
-fn p(w: &mut Write, s: &str) {
-    write!(w, "{}", s).unwrap();
+fn p(w: &mut Write, s: &str) -> std::io::Result<()> {
+    write!(w, "{}", s)
 }
 
 #[derive(Debug, PartialEq)]
 pub struct P;
 
 impl<'a> SimpleCommand<'a> for P {
-    fn execute(&self, w: &mut Write, dot: &'a Address) -> Vec<Address<'a>> {
-        p(w, &dot.buffer.data[dot.r.0..dot.r.1]);
+    fn execute(&self, w: &mut Write, buffer: &mut Buffer, dot: Range) -> Result<Range, Box<Error>> {
+        p(w, &buffer.data[dot.0..dot.1])?;
 
-        vec![*dot]
+        Ok(dot)
     }
     fn to_tuple(&self) -> (char, LinkedList<String>) {
         ('p', LinkedList::new())
@@ -24,8 +25,15 @@ impl<'a> SimpleCommand<'a> for P {
 pub struct A(pub String);
 
 impl<'a> SimpleCommand<'a> for A {
-    fn execute(&self, _w: &mut Write, _dot: &'a Address) -> Vec<Address<'a>> {
-        unimplemented!()
+    fn execute(
+        &self,
+        _w: &mut Write,
+        buffer: &mut Buffer,
+        dot: Range,
+    ) -> Result<Range, Box<Error>> {
+        buffer.change(dot, true, &self.0);
+
+        Ok(Range(dot.1, dot.1 + self.0.len()))
     }
 
     fn to_tuple(&self) -> (char, LinkedList<String>) {
@@ -35,11 +43,82 @@ impl<'a> SimpleCommand<'a> for A {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub struct C(pub String);
+
+impl<'a> SimpleCommand<'a> for C {
+    fn execute(
+        &self,
+        _w: &mut Write,
+        buffer: &mut Buffer,
+        dot: Range,
+    ) -> Result<Range, Box<Error>> {
+        buffer.change(dot, false, &self.0);
+
+        Ok(Range(dot.1, dot.1 + self.0.len()))
+    }
+
+    fn to_tuple(&self) -> (char, LinkedList<String>) {
+        let mut list = LinkedList::new();
+        list.push_back(self.0.clone());
+        ('c', list)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct I(pub String);
+
+impl<'a> SimpleCommand<'a> for I {
+    fn execute(
+        &self,
+        _w: &mut Write,
+        buffer: &mut Buffer,
+        dot: Range,
+    ) -> Result<Range, Box<Error>> {
+        let mut replacement = String::from_str(&self.0).unwrap();
+        replacement.push_str(&buffer.data[dot.0..dot.1]);
+        buffer.change(dot, false, &replacement);
+
+        Ok(Range(dot.1, dot.1 + self.0.len()))
+    }
+
+    fn to_tuple(&self) -> (char, LinkedList<String>) {
+        let mut list = LinkedList::new();
+        list.push_back(self.0.clone());
+        ('c', list)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct D;
+
+impl<'a> SimpleCommand<'a> for D {
+    fn execute(
+        &self,
+        _w: &mut Write,
+        buffer: &mut Buffer,
+        dot: Range,
+    ) -> Result<Range, Box<Error>> {
+        buffer.change(dot, false, "");
+
+        Ok(Range(dot.1, dot.1))
+    }
+
+    fn to_tuple(&self) -> (char, LinkedList<String>) {
+        ('c', LinkedList::new())
+    }
+}
+
 #[derive(Debug)]
-pub struct X<'a>(pub String, pub Box<Command<'a>>);
+pub struct X<'a>(pub String, pub Box<Invocation<'a>>);
 
 impl<'a, 'b> SimpleCommand<'a> for X<'b> {
-    fn execute(&self, _w: &mut Write, _dot: &'a Address) -> Vec<Address<'a>> {
+    fn execute(
+        &self,
+        _w: &mut Write,
+        _buffer: &mut Buffer,
+        _dot: Range,
+    ) -> Result<Range, Box<Error>> {
         unimplemented!()
     }
 
@@ -55,11 +134,11 @@ mod tests {
     use crate::sre::SimpleCommand;
     #[test]
     fn smoke() {
-        let b = super::Buffer::new("xd lol".as_bytes()).unwrap();
-        let addr = b.new_address(0, 2);
+        let mut b = super::Buffer::new("xd lol".as_bytes()).unwrap();
+        let addr = b.new_address(0, 2).range();
         let p = super::P;
         let mut w = Vec::new();
-        p.execute(&mut w, &addr);
+        p.execute(&mut w, &mut b, addr).unwrap();
         assert_eq!(String::from_utf8_lossy(&w[..]), "xd");
     }
 }

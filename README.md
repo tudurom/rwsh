@@ -14,6 +14,9 @@ This is going to be a UNIX shell based around [Structural Regular Expressions][s
 - [x] Basic command execution with quoted string rules
 - [x] Pipes
 - [ ] Structural regular expressions
+    - [x] Addresses
+    - [x] Basic commands (`a`, `c`, `i`, `d`, `p`)
+    - [ ] Loops
 - [ ] Shell stuff:
     - [ ] Handle signals
     - [ ] Load scripts

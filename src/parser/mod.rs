@@ -30,12 +30,18 @@ pub fn escape(c: char) -> char {
     }
 }
 
-/// A command tuple is made of its name and its arguments.
 #[derive(Debug, PartialEq)]
+/// A command tuple is made of its name and its arguments.
 pub struct Command(pub String, pub Vec<String>);
 
-/// A chain of [`Task`s](struct.Task.html) piped together
 #[derive(Debug, PartialEq)]
+/// A chain of SRE commands.
+///
+/// Something like `|> ,a/append/ |> 1,2p`.
+pub struct SRESequence(pub Vec<SRECommand>);
+
+#[derive(Debug, PartialEq)]
+/// A chain of [`Task`s](struct.Task.html) piped together
 pub struct Pipeline(pub Vec<Task>);
 
 #[derive(Debug, PartialEq)]
@@ -43,7 +49,7 @@ pub struct Pipeline(pub Vec<Task>);
 /// either an external command, or a SRE program.
 pub enum Task {
     Command(Command),
-    SREProgram(SRECommand),
+    SREProgram(SRESequence),
 }
 
 /// Parses the series of [`Token`s](./lex/enum.Token.html) to the AST ([`ParseNode`s](enum.ParseNode.html)).
@@ -150,12 +156,20 @@ impl<R: LineReader> Parser<R> {
         self.skip_space(false);
         match self.peek() {
             Some(Ok(lex::Token {
-                kind: lex::TokenKind::Pizza(sre),
+                kind: lex::TokenKind::Pizza(_),
                 ..
             })) => {
-                self.next_tok();
-                self.skip_space(true);
-                Some(Ok(Task::SREProgram(sre)))
+                let mut commands = Vec::<SRECommand>::new();
+                while let Some(Ok(lex::Token {
+                    kind: lex::TokenKind::Pizza(sre),
+                    ..
+                })) = self.peek()
+                {
+                    commands.push(sre);
+                    self.next_tok();
+                    self.skip_space(true);
+                }
+                Some(Ok(Task::SREProgram(SRESequence(commands))))
             }
             Some(Ok(lex::Token {
                 kind: lex::TokenKind::WordString(_, _),
@@ -324,5 +338,17 @@ pub mod tests {
         )])));
         assert_eq!(p.parse_pipeline(), ok1);
         assert_eq!(p.parse_pipeline(), ok2);
+    }
+
+    #[test]
+    fn parse_task() {
+        let s = "|> 2,3a/something/    |> ,p";
+        let mut p = super::Parser::new(new_dummy_buf(s.lines()));
+        let task = p.parse_task();
+        if let Some(Ok(super::Task::SREProgram(seq))) = task {
+            assert_eq!(seq.0.len(), 2);
+        } else {
+            panic!(task);
+        }
     }
 }

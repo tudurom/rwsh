@@ -42,6 +42,10 @@ impl<'a> Address<'a> {
         self.resolve_address(Some(ca), 0)
     }
 
+    pub fn range(self) -> Range {
+        self.r
+    }
+
     fn line_address(self, line: usize, sign: i32) -> Result<Self, AddressResolveError> {
         let mut a = Address::new(self.buffer);
 

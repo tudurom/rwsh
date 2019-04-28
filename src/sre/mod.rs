@@ -4,10 +4,56 @@
 pub mod address;
 pub mod commands;
 
-use crate::parser::sre::address::ComposedAddress;
+use crate::parser::sre::Command as SRECommand;
 use address::Address;
+use address::AddressResolveError;
+use std::collections::BTreeSet;
 use std::collections::LinkedList;
+use std::error::Error;
 use std::io::{self, Read, Write};
+use std::str::FromStr;
+
+#[derive(Debug, Eq)]
+pub struct Change {
+    pos: usize,
+    deleted: usize,
+    content: String,
+}
+
+impl Change {
+    pub fn new(pos: usize, deleted: usize, content: &str) -> Change {
+        Change {
+            pos,
+            deleted,
+            content: String::from_str(content).unwrap(),
+        }
+    }
+}
+
+impl Ord for Change {
+    fn cmp(&self, rhs: &Change) -> std::cmp::Ordering {
+        self.pos.cmp(&rhs.pos)
+    }
+}
+
+impl PartialOrd for Change {
+    fn partial_cmp(&self, rhs: &Change) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(rhs))
+    }
+}
+
+impl PartialEq for Change {
+    // a bit of a hack, in order to let the BTreeHash tell us
+    // if there are any intersecting changes,
+    // we will consider intersecting changes equal
+    fn eq(&self, rhs: &Change) -> bool {
+        use std::cmp::{max, min};
+        let left = max(self.pos, rhs.pos);
+        let right = min(self.pos + self.deleted - 1, rhs.pos + rhs.deleted - 1);
+
+        left > right
+    }
+}
 
 #[derive(Debug)]
 /// The buffer holds the text that we are operating on.
@@ -15,13 +61,17 @@ use std::io::{self, Read, Write};
 /// For the moment, it keeps the entire output of the piped command.
 pub struct Buffer {
     data: String,
+    changes: BTreeSet<Change>,
 }
 
 impl Buffer {
     pub fn new(mut r: impl Read) -> io::Result<Buffer> {
         let mut s = String::new();
         r.read_to_string(&mut s)?;
-        Ok(Buffer { data: s })
+        Ok(Buffer {
+            data: s,
+            changes: BTreeSet::new(),
+        })
     }
 
     /// Returns a new address in this buffer.
@@ -30,6 +80,41 @@ impl Buffer {
             r: Range(l, r),
             buffer: self,
         }
+    }
+
+    /// Returns `true` if the new change didn't intersect any
+    pub fn change(&mut self, dot: Range, append: bool, content: &str) -> bool {
+        if append {
+            self.changes.insert(Change {
+                pos: dot.1,
+                deleted: 0,
+                content: String::from_str(content).unwrap(),
+            })
+        } else {
+            self.changes.insert(Change {
+                pos: dot.0,
+                deleted: dot.1 - dot.0,
+                content: String::from_str(content).unwrap(),
+            })
+        }
+    }
+
+    pub fn apply_changes(&mut self) {
+        let mut new_data = Vec::<u8>::new();
+        let mut last_index: usize = 0;
+        for c in &self.changes {
+            for i in last_index..c.pos {
+                new_data.push(self.data.as_bytes()[i]);
+            }
+            for b in c.content.bytes() {
+                new_data.push(b);
+            }
+            last_index = c.pos + c.deleted;
+        }
+        for i in last_index..self.data.len() {
+            new_data.push(self.data.as_bytes()[i]);
+        }
+        self.data = String::from_utf8_lossy(&new_data).to_string();
     }
 }
 
@@ -41,20 +126,35 @@ pub struct Range(usize, usize);
 
 /// Defines an interface for text manipulation routines.
 pub trait SimpleCommand<'a>: std::fmt::Debug {
-    fn execute(&self, w: &mut Write, dot: &'a Address) -> Vec<Address<'a>>;
+    fn execute(&self, w: &mut Write, buffer: &mut Buffer, dot: Range) -> Result<Range, Box<Error>>;
     fn to_tuple(&self) -> (char, LinkedList<String>);
 }
 
 #[derive(Debug)]
 /// A SRE command that can be applied on a buffer.
-pub struct Command<'a> {
-    address: ComposedAddress,
+pub struct Invocation<'a> {
+    address: Range,
     simple: Box<dyn SimpleCommand<'a>>,
 }
 
-impl<'a> Command<'a> {
-    pub fn new(address: ComposedAddress, simple: Box<dyn SimpleCommand<'a>>) -> Self {
-        Command { address, simple }
+impl<'a> Invocation<'a> {
+    pub fn new(parsed: SRECommand, buf: &Buffer) -> Result<Invocation<'a>, AddressResolveError> {
+        let address = Address::new(buf).address(parsed.address)?.range();
+        Ok(Invocation {
+            address,
+            simple: match parsed.name {
+                'p' => Box::new(commands::P),
+                'a' => Box::new(commands::A(parsed.string_args[0].clone())),
+                'c' => Box::new(commands::C(parsed.string_args[0].clone())),
+                'i' => Box::new(commands::I(parsed.string_args[0].clone())),
+                'd' => Box::new(commands::D),
+                _ => unimplemented!(),
+            },
+        })
+    }
+
+    pub fn execute(self, w: &mut Write, buf: &mut Buffer) -> Result<Range, Box<Error>> {
+        self.simple.execute(w, buf, self.address)
     }
 }
 
