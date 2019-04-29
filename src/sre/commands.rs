@@ -55,7 +55,7 @@ impl<'a> SimpleCommand<'a> for C {
     ) -> Result<Range, Box<Error>> {
         buffer.change(dot, false, &self.0);
 
-        Ok(Range(dot.1, dot.1 + self.0.len()))
+        Ok(Range(dot.0, dot.0 + self.0.len()))
     }
 
     fn to_tuple(&self) -> (char, LinkedList<String>) {
@@ -79,7 +79,7 @@ impl<'a> SimpleCommand<'a> for I {
         replacement.push_str(&buffer.data[dot.0..dot.1]);
         buffer.change(dot, false, &replacement);
 
-        Ok(Range(dot.1, dot.1 + self.0.len()))
+        Ok(Range(dot.0, dot.0 + self.0.len()))
     }
 
     fn to_tuple(&self) -> (char, LinkedList<String>) {
@@ -101,7 +101,7 @@ impl<'a> SimpleCommand<'a> for D {
     ) -> Result<Range, Box<Error>> {
         buffer.change(dot, false, "");
 
-        Ok(Range(dot.1, dot.1))
+        Ok(Range(dot.0, dot.0))
     }
 
     fn to_tuple(&self) -> (char, LinkedList<String>) {
@@ -110,22 +110,46 @@ impl<'a> SimpleCommand<'a> for D {
 }
 
 #[derive(Debug)]
-pub struct X<'a>(pub String, pub Box<Invocation<'a>>);
+pub struct X(pub String, pub SRECommand);
 
-impl<'a, 'b> SimpleCommand<'a> for X<'b> {
-    fn execute(
-        &self,
-        _w: &mut Write,
-        _buffer: &mut Buffer,
-        _dot: Range,
-    ) -> Result<Range, Box<Error>> {
-        unimplemented!()
+impl<'a> SimpleCommand<'a> for X {
+    fn execute(&self, w: &mut Write, buffer: &mut Buffer, dot: Range) -> Result<Range, Box<Error>> {
+        let re = regex::Regex::new(&self.0)?;
+        let mut addresses = Vec::new();
+        for m in re.find_iter(&buffer.data[dot.0..dot.1]) {
+            addresses.push(Range(m.start(), m.end()));
+        }
+        let mut last: Option<Range> = None;
+        for addr in addresses {
+            let iv = Invocation::new(self.1.clone(), buffer, Some(addr))?;
+            last = Some(iv.execute(w, buffer)?);
+        }
+        Ok(last.unwrap_or(dot))
     }
 
     fn to_tuple(&self) -> (char, LinkedList<String>) {
         let mut list = LinkedList::new();
         list.push_back(self.0.clone());
         ('a', list)
+    }
+}
+
+#[derive(Debug)]
+pub struct Equals;
+
+impl<'a> SimpleCommand<'a> for Equals {
+    fn execute(
+        &self,
+        w: &mut Write,
+        _buffer: &mut Buffer,
+        dot: Range,
+    ) -> Result<Range, Box<Error>> {
+        writeln!(w, "#{},#{}", dot.0, dot.1)?;
+        Ok(dot)
+    }
+
+    fn to_tuple(&self) -> (char, LinkedList<String>) {
+        ('=', LinkedList::new())
     }
 }
 

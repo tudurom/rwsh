@@ -38,6 +38,10 @@ impl<'a> Address<'a> {
         buffer.new_address(0, 0)
     }
 
+    pub fn from_range(buffer: &Buffer, range: Range) -> Address {
+        buffer.new_address(range.0, range.1)
+    }
+
     pub fn address(self, ca: ComposedAddress) -> Result<Self, AddressResolveError> {
         self.resolve_address(Some(ca), 0)
     }

@@ -2,7 +2,7 @@ use super::Command;
 use crate::parser::{escape, skip_whitespace};
 use crate::util::{BufReadChars, LineReader, ParseError};
 
-fn arg_nr(name: char) -> i8 {
+fn arg_nr(name: char) -> i32 {
     match name {
         'p' => 0,
 
@@ -12,9 +12,17 @@ fn arg_nr(name: char) -> i8 {
         'g' | 'v' => 1,
         'x' | 'y' => 1,
 
+        '=' => 0,
+
         'Z' => 3, // for debugging
         _ => -1,
     }
+}
+
+/// It is identical to `has_command_argument`, for now.
+fn has_regex_argument(name: char) -> bool {
+    let s = ['g', 'v', 'x', 'y'];
+    s.binary_search(&name).is_ok()
 }
 
 fn has_command_argument(name: char) -> bool {
@@ -50,6 +58,17 @@ fn read_arg<R: LineReader>(it: &mut BufReadChars<R>) -> Result<String, ParseErro
     }
 }
 
+fn read_regex_arg<R: LineReader>(it: &mut BufReadChars<R>) -> Result<String, ParseError> {
+    skip_whitespace(it);
+    it.next(); // /
+    let (s, closed) = crate::parser::misc::read_regexp(it, '/');
+    if closed {
+        Ok(s)
+    } else {
+        Err(it.new_error("unexpected EOF while reading regexp".to_owned()))
+    }
+}
+
 #[derive(Debug, PartialEq)]
 /// A simple command is a command without any address.
 /// It has a list of slash-delimited arguments and an optional command argument, for commands such as `x` and `g`,
@@ -70,7 +89,12 @@ pub fn parse_command<R: LineReader>(it: &mut BufReadChars<R>) -> Result<SimpleCo
         Some(name) if nr != -1 => {
             let mut i = 0;
             while i < nr && it.peek() == Some(&'/') {
-                args.push(read_arg(it)?);
+                let arg = if i == 0 && has_regex_argument(name) {
+                    read_regex_arg(it)?
+                } else {
+                    read_arg(it)?
+                };
+                args.push(arg);
                 i += 1;
             }
             if i < nr {

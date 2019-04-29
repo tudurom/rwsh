@@ -1,5 +1,6 @@
 //! The parsers and lexers of the `rwsh` scripting language and its SRE sublanguage.
 pub mod lex;
+pub mod misc;
 pub mod sre;
 
 use self::lex::{Lexer, Token};

@@ -79,16 +79,18 @@ impl<R: LineReader> Shell<R> {
                     }
                 },
                 Task::SREProgram(p) => {
+                    let mut prev_address = None;
                     runner
                         .run(move || {
                             let mut buf = Buffer::new(stdin()).unwrap();
                             for prog in &p.0 {
-                                let inv = Invocation::new(prog.clone(), &buf).unwrap();
+                                let inv =
+                                    Invocation::new(prog.clone(), &buf, prev_address).unwrap();
                                 let mut out = Box::new(stdout());
-                                inv.execute(&mut out, &mut buf).unwrap();
+                                let addr = inv.execute(&mut out, &mut buf).unwrap();
                                 use std::io::Write;
                                 out.flush().unwrap();
-                                buf.apply_changes();
+                                prev_address = Some(buf.apply_changes(addr));
                             }
                         })
                         .unwrap();

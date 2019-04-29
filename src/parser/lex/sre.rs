@@ -100,35 +100,17 @@ fn scan_regexp<R: LineReader>(
     reverse: bool,
 ) -> Result<Token, ParseError> {
     let mut s = String::new();
-    let mut closed = false;
-    let mut escaping = false;
     let delimiter = if reverse { '?' } else { '/' };
 
     s.push(it.next().unwrap());
-    while let Some(&c) = it.peek() {
-        if c == delimiter {
-            if escaping {
-                s.push(c);
-                escaping = false;
-            } else {
-                closed = true;
-                it.next();
-                break;
-            }
-        } else {
-            if escaping {
-                s.push(c);
-                escaping = false;
-            } else if c == '\\' {
-                escaping = true;
-            } else {
-                s.push(c);
-            }
-        }
-        it.next();
-    }
+    let closed = {
+        let (new_s, closed) = crate::parser::misc::read_regexp(it, delimiter);
+        s.push_str(&new_s);
+        closed
+    };
 
     if closed {
+        it.next();
         if reverse {
             Ok(Token::BackwardsRegexp(s))
         } else {
@@ -150,7 +132,7 @@ mod tests {
         let mut buf = new_dummy_buf(s.lines());
         assert_eq!(
             super::scan_regexp(&mut buf, false),
-            Ok(Regexp("/lm(a[o-z]\\))".to_owned()))
+            Ok(Regexp("/lm(a[o-z]\\\\))".to_owned()))
         );
         assert_eq!(
             super::scan_regexp(&mut buf, true),
