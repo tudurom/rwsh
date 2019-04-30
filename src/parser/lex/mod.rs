@@ -128,11 +128,12 @@ impl<R: LineReader> Iterator for Lexer<R> {
                 self.input.next();
                 if let Some('>') = self.input.peek() {
                     self.input.next();
-                    match parse_command(&mut self.input) {
-                        Ok(sre) => {
+                    match parse_command(&mut self.input, false) {
+                        Ok(Some(sre)) => {
                             self.pipe_follows = true;
                             Some(Ok(tok!(TokenKind::Pizza(sre), 1, self.input)))
                         }
+                        Ok(None) => panic!(),
                         Err(e) => {
                             self.errored = true;
                             Some(Err(e))
@@ -145,7 +146,7 @@ impl<R: LineReader> Iterator for Lexer<R> {
                 self.input.next();
                 Some(Ok(tok!(TokenKind::Newline, 0, self.input)))
             } else if c.is_whitespace() {
-                let len = skip_whitespace(&mut self.input);
+                let len = skip_whitespace(&mut self.input, false);
                 Some(Ok(tok!(TokenKind::Space, len, self.input)))
             } else {
                 self.errored = true;
@@ -329,7 +330,7 @@ mod tests {
                 ComposedAddress::new(SimpleAddress::Dot, None, None),
                 'a',
                 vec!["pizza".to_owned()],
-                None
+                vec![],
             )))),
             Ok(tok!(Space)),
             Ok(tok!(Pipe)),

@@ -13,7 +13,7 @@ pub struct Command {
     pub address: ComposedAddress,
     pub name: char,
     pub string_args: Vec<String>,
-    pub command_arg: Option<Box<Command>>,
+    pub command_args: Vec<Command>,
 }
 
 impl Command {
@@ -21,32 +21,38 @@ impl Command {
         address: ComposedAddress,
         name: char,
         string_args: Vec<String>,
-        command_arg: Option<Box<Command>>,
+        command_args: Vec<Command>,
     ) -> Command {
         Command {
             address,
             name,
             string_args,
-            command_arg,
+            command_args,
         }
     }
 }
 
 /// Parses the address and the simple command, returning a complete, ready-to-use command.
-pub fn parse_command<R: LineReader>(it: &mut BufReadChars<R>) -> Result<Command, ParseError> {
-    skip_whitespace(it);
+pub fn parse_command<R: LineReader>(
+    it: &mut BufReadChars<R>,
+    brace: bool,
+) -> Result<Option<Command>, ParseError> {
+    skip_whitespace(it, true);
     let address = match address::Parser::new(it)?.parse() {
         Ok(x) => x,
         Err(e) => return Err(it.new_error(e)),
     }
     .unwrap_or_default();
-    let simple = command::parse_command(it)?;
-    Ok(Command {
+    let simple = match command::parse_command(it, brace)? {
+        Some(c) => c,
+        None => return Ok(None),
+    };
+    Ok(Some(Command {
         address,
         name: simple.name,
         string_args: simple.args,
-        command_arg: simple.command_arg,
-    })
+        command_args: simple.command_args,
+    }))
 }
 
 #[cfg(test)]
@@ -57,7 +63,7 @@ mod tests {
     fn smoke() {
         let mut buf = new_dummy_buf("/something /a/else/ ,p ,x/Emacs/ /{TM}/d".lines());
         assert_eq!(
-            super::parse_command(&mut buf).unwrap(),
+            super::parse_command(&mut buf, false).unwrap().unwrap(),
             super::Command {
                 address: ComposedAddress::new(
                     SimpleAddress::Regex("/something ".to_owned(), false),
@@ -66,11 +72,11 @@ mod tests {
                 ),
                 name: 'a',
                 string_args: vec!["else".to_owned()],
-                command_arg: None,
+                command_args: vec![],
             }
         );
         assert_eq!(
-            super::parse_command(&mut buf).unwrap(),
+            super::parse_command(&mut buf, false).unwrap().unwrap(),
             super::Command {
                 address: ComposedAddress::new(
                     SimpleAddress::Comma,
@@ -87,11 +93,11 @@ mod tests {
                 ),
                 name: 'p',
                 string_args: vec![],
-                command_arg: None,
+                command_args: vec![],
             }
         );
         assert_eq!(
-            super::parse_command(&mut buf).unwrap(),
+            super::parse_command(&mut buf, false).unwrap().unwrap(),
             super::Command {
                 address: ComposedAddress::new(
                     SimpleAddress::Comma,
@@ -108,16 +114,16 @@ mod tests {
                 ),
                 name: 'x',
                 string_args: vec!["Emacs".to_owned()],
-                command_arg: Some(Box::new(super::Command {
+                command_args: vec![super::Command {
                     address: ComposedAddress::new(
                         SimpleAddress::Regex("/{TM}".to_owned(), false),
                         None,
-                        None
+                        None,
                     ),
                     name: 'd',
                     string_args: vec![],
-                    command_arg: None
-                }))
+                    command_args: vec![],
+                }]
             }
         );
     }

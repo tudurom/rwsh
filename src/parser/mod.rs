@@ -9,10 +9,10 @@ use sre::Command as SRECommand;
 use std::cell::RefCell;
 use std::iter::Peekable;
 
-fn skip_whitespace<R: LineReader>(it: &mut BufReadChars<R>) -> usize {
+fn skip_whitespace<R: LineReader>(it: &mut BufReadChars<R>, skip_newlines: bool) -> usize {
     let mut len: usize = 0;
     while let Some(&c) = it.peek() {
-        if !c.is_whitespace() || c == '\n' {
+        if !c.is_whitespace() || (c == '\n' && !skip_newlines) {
             break;
         }
         len += 1;

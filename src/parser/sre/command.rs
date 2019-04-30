@@ -32,7 +32,7 @@ fn has_command_argument(name: char) -> bool {
 
 #[allow(clippy::collapsible_if)]
 fn read_arg<R: LineReader>(it: &mut BufReadChars<R>) -> Result<String, ParseError> {
-    skip_whitespace(it);
+    skip_whitespace(it, false);
     it.next(); // /
     let mut s = String::new();
     let mut escaping = false;
@@ -59,7 +59,7 @@ fn read_arg<R: LineReader>(it: &mut BufReadChars<R>) -> Result<String, ParseErro
 }
 
 fn read_regex_arg<R: LineReader>(it: &mut BufReadChars<R>) -> Result<String, ParseError> {
-    skip_whitespace(it);
+    skip_whitespace(it, false);
     it.next(); // /
     let (s, closed) = crate::parser::misc::read_regexp(it, '/');
     if closed {
@@ -76,12 +76,15 @@ fn read_regex_arg<R: LineReader>(it: &mut BufReadChars<R>) -> Result<String, Par
 pub struct SimpleCommand {
     pub name: char,
     pub args: Vec<String>,
-    pub command_arg: Option<Box<Command>>,
+    pub command_args: Vec<Command>,
 }
 
 /// Parses the whole command. If the command accepts a command argument, the argument is recursively parsed too.
-pub fn parse_command<R: LineReader>(it: &mut BufReadChars<R>) -> Result<SimpleCommand, ParseError> {
-    skip_whitespace(it);
+pub fn parse_command<R: LineReader>(
+    it: &mut BufReadChars<R>,
+    brace: bool,
+) -> Result<Option<SimpleCommand>, ParseError> {
+    skip_whitespace(it, true);
     let chr = it.next();
     let nr = chr.map_or(-1, arg_nr);
     let mut args = Vec::new();
@@ -115,18 +118,36 @@ pub fn parse_command<R: LineReader>(it: &mut BufReadChars<R>) -> Result<SimpleCo
                         return Err(it.new_error("missing terminal '/' in parameter".to_owned()));
                     }
                 }
-                let command_arg = if has_command_argument(name) {
-                    Some(super::parse_command(it)?)
+                let command_args = if has_command_argument(name) {
+                    vec![super::parse_command(it, false)?.unwrap()]
                 } else {
-                    None
+                    vec![]
                 };
-                Ok(SimpleCommand {
+                Ok(Some(SimpleCommand {
                     name,
                     args,
-                    command_arg: command_arg.map(Box::new),
-                })
+                    command_args,
+                }))
             }
         }
+        Some('{') => {
+            let mut x = super::parse_command(it, true);
+            let mut command_args = Vec::new();
+            while let Ok(Some(c)) = x {
+                command_args.push(c);
+                x = super::parse_command(it, true);
+            }
+            if x.is_err() {
+                Err(x.err().unwrap())
+            } else {
+                Ok(Some(SimpleCommand {
+                    name: '{',
+                    args: Vec::new(),
+                    command_args,
+                }))
+            }
+        }
+        Some('}') if brace => Ok(None),
         Some(c) => Err(it.new_error(format!(
             "unexpected character '{}' when reading command name",
             c
@@ -142,45 +163,42 @@ mod tests {
     #[test]
     fn smoke() {
         assert_eq!(
-            super::parse_command(&mut new_dummy_buf("p".lines())).unwrap(),
+            super::parse_command(&mut new_dummy_buf("p".lines()), false)
+                .unwrap()
+                .unwrap(),
             super::SimpleCommand {
                 name: 'p',
                 args: vec![],
-                command_arg: None
+                command_args: vec![],
             }
         );
         assert_eq!(
-            super::parse_command(&mut new_dummy_buf("a/xd/".lines())).unwrap(),
+            super::parse_command(&mut new_dummy_buf("a/xd/".lines()), false)
+                .unwrap()
+                .unwrap(),
             super::SimpleCommand {
                 name: 'a',
                 args: vec!["xd".to_owned()],
-                command_arg: None
+                command_args: vec![],
             }
         );
     }
 
     #[test]
     fn command_arg() {
-        let v = super::parse_command(&mut new_dummy_buf("x/lmao/ 1x/kek/ 2a/xd/".lines())).unwrap();
-        assert_eq!(v.command_arg.clone().unwrap().name, 'x');
-        assert_eq!(
-            v.command_arg.clone().unwrap().command_arg.unwrap().name,
-            'a'
-        );
-        assert!(v
-            .command_arg
+        let v = super::parse_command(&mut new_dummy_buf("x/lmao/ 1x/kek/ 2a/xd/".lines()), false)
             .unwrap()
-            .command_arg
-            .unwrap()
-            .command_arg
-            .is_none());
+            .unwrap();
+        assert_eq!(v.command_args.clone()[0].name, 'x');
+        assert_eq!(v.command_args.clone()[0].command_args[0].name, 'a');
+        assert!(v.command_args[0].command_args[0].command_args.is_empty());
     }
 
     #[test]
     fn many_string_arguments() {
         let mut buf = new_dummy_buf("Z/xd  &$\\n#@\\/xd/\\tlol    /ke.k\\//".lines());
         assert_eq!(
-            super::parse_command(&mut buf).unwrap(),
+            super::parse_command(&mut buf, false).unwrap().unwrap(),
             super::SimpleCommand {
                 name: 'Z',
                 args: vec![
@@ -188,7 +206,7 @@ mod tests {
                     "\tlol    ".to_owned(),
                     "ke.k/".to_owned()
                 ],
-                command_arg: None
+                command_args: vec![],
             }
         );
     }

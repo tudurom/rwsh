@@ -110,14 +110,24 @@ impl<'a> SimpleCommand<'a> for D {
 }
 
 #[derive(Debug)]
-pub struct X(pub String, pub SRECommand);
+pub struct X(pub String, pub SRECommand, pub bool);
 
 impl<'a> SimpleCommand<'a> for X {
     fn execute(&self, w: &mut Write, buffer: &mut Buffer, dot: Range) -> Result<Range, Box<Error>> {
         let re = regex::Regex::new(&self.0)?;
         let mut addresses = Vec::new();
+        let mut last_match = 0;
         for m in re.find_iter(&buffer.data[dot.0..dot.1]) {
-            addresses.push(Range(m.start(), m.end()));
+            let r = Range(m.start(), m.end());
+            if !self.2 {
+                addresses.push(r);
+            } else if r.0 - last_match > 0 {
+                addresses.push(Range(last_match, r.0));
+            }
+            last_match = r.1;
+        }
+        if self.2 {
+            addresses.push(Range(last_match, dot.1));
         }
         let mut last: Option<Range> = None;
         for addr in addresses {
@@ -131,6 +141,46 @@ impl<'a> SimpleCommand<'a> for X {
         let mut list = LinkedList::new();
         list.push_back(self.0.clone());
         ('a', list)
+    }
+}
+
+#[derive(Debug)]
+pub struct Brace(pub Vec<SRECommand>);
+
+impl<'a> SimpleCommand<'a> for Brace {
+    fn execute(&self, w: &mut Write, buffer: &mut Buffer, dot: Range) -> Result<Range, Box<Error>> {
+        for c in &self.0 {
+            let iv = Invocation::new(c.clone(), buffer, Some(dot))?;
+            iv.execute(w, buffer)?;
+        }
+        Ok(Range(dot.0, dot.0))
+    }
+
+    fn to_tuple(&self) -> (char, LinkedList<String>) {
+        ('{', LinkedList::new())
+    }
+}
+
+#[derive(Debug)]
+/// If the third field is set to true, the command is run if the dot does NOT match.
+pub struct Conditional(pub String, pub SRECommand, pub bool);
+
+impl<'a> SimpleCommand<'a> for Conditional {
+    fn execute(&self, w: &mut Write, buffer: &mut Buffer, dot: Range) -> Result<Range, Box<Error>> {
+        let re = regex::Regex::new(&self.0)?;
+        let is_match = re.is_match(&buffer.data[dot.0..dot.1]);
+        if is_match == !self.2 {
+            let iv = Invocation::new(self.1.clone(), buffer, Some(dot))?;
+            Ok(iv.execute(w, buffer)?)
+        } else {
+            Ok(dot)
+        }
+    }
+
+    fn to_tuple(&self) -> (char, LinkedList<String>) {
+        let mut list = LinkedList::new();
+        list.push_back(self.0.clone());
+        (if !self.2 { 'g' } else { 'v' }, list)
     }
 }
 

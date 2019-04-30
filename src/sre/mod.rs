@@ -179,8 +179,27 @@ impl<'a> Invocation<'a> {
 
                 'x' => Box::new(commands::X(
                     parsed.string_args[0].clone(),
-                    *parsed.command_arg.unwrap(),
+                    parsed.command_args[0].clone(),
+                    false,
                 )),
+                'y' => Box::new(commands::X(
+                    parsed.string_args[0].clone(),
+                    parsed.command_args[0].clone(),
+                    true,
+                )),
+
+                'g' => Box::new(commands::Conditional(
+                    parsed.string_args[0].clone(),
+                    parsed.command_args[0].clone(),
+                    false,
+                )),
+                'v' => Box::new(commands::Conditional(
+                    parsed.string_args[0].clone(),
+                    parsed.command_args[0].clone(),
+                    true,
+                )),
+
+                '{' => Box::new(commands::Brace(parsed.command_args)),
 
                 '=' => Box::new(commands::Equals),
                 _ => unimplemented!(),
