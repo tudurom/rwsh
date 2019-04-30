@@ -2,7 +2,6 @@ use crate::parser::{Parser, Pipeline, Task};
 use crate::process::{self, PipeRunner};
 use crate::sre::{Buffer, Invocation};
 use crate::util::{BufReadChars, InteractiveLineReader, LineReader};
-use nix::unistd;
 use std::env;
 use std::io::{stdin, stdout};
 use std::path::{Path, PathBuf};
@@ -50,11 +49,11 @@ impl<R: LineReader> Shell<R> {
         I: Iterator<Item = &'a str>,
     {
         let dir: &str;
-        let home = unistd::getcwd().unwrap();
+        let home = "~";
         if let Some(arg) = args.next() {
             dir = arg;
         } else {
-            dir = home.to_str().unwrap();
+            dir = home;
         }
         let path = expand_home(dir);
         match env::set_current_dir(path) {
@@ -70,7 +69,8 @@ impl<R: LineReader> Shell<R> {
             match task {
                 Task::Command(command) => match &command.0 as &str {
                     "cd" => {
-                        return Self::do_cd(command.1.iter().map(|x| &x[..]));
+                        Self::do_cd(command.1.iter().map(|x| &x[..]))?;
+                        runner.run(move || {}).unwrap();
                     }
                     name => {
                         if let Err(e) = runner.run(process::exec(name, command.1.iter())) {
@@ -118,7 +118,7 @@ fn expand_home<P: AsRef<Path>>(path: P) -> PathBuf {
 
     if let Some(p) = it.peek() {
         if *p == "~" {
-            new_path.push(unistd::getcwd().unwrap());
+            new_path.push(dirs::home_dir().unwrap());
             it.next();
         }
     }

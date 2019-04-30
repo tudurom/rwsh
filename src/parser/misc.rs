@@ -9,28 +9,26 @@ pub fn read_regexp<R: LineReader>(it: &mut BufReadChars<R>, delimiter: char) -> 
         if c == delimiter {
             closed = true;
             break;
-        } else {
-            if c == '\\' {
-                it.next();
-                match it.peek() {
-                    Some('\\') => {
-                        s.push_str("\\\\");
-                    }
-                    Some(&x @ '/') | Some(&x @ '?') => {
-                        if x != delimiter {
-                            s.push('\\');
-                        }
-                        s.push(x);
-                    }
-                    Some(&x) => {
-                        s.push('\\');
-                        s.push(x);
-                    }
-                    None => {}
+        } else if c == '\\' {
+            it.next();
+            match it.peek() {
+                Some('\\') => {
+                    s.push_str("\\\\");
                 }
-            } else {
-                s.push(c);
+                Some(&x @ '/') | Some(&x @ '?') => {
+                    if x != delimiter {
+                        s.push('\\');
+                    }
+                    s.push(x);
+                }
+                Some(&x) => {
+                    s.push('\\');
+                    s.push(x);
+                }
+                None => {}
             }
+        } else {
+            s.push(c);
         }
         it.next();
     }
