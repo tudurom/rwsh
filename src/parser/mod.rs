@@ -115,11 +115,7 @@ impl<R: LineReader> Parser<R> {
                             ..
                         },
                     )) => {
-                        if let Some(Ok(lex::Token {
-                            kind: lex::TokenKind::Pipe,
-                            ..
-                        })) = self.peek()
-                        {
+                        if tok.kind == lex::TokenKind::Pipe {
                             self.next_tok();
                         }
                         match self.parse_pipeline() {

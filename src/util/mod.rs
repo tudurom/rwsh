@@ -1,7 +1,8 @@
 //! Provides functions and types that are used throughout the codebase.
+use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
-use std::io::{self, stdin, stdout, Write};
+use std::io::{self, stdin, stdout, BufRead, BufReader, Read, Write};
 use std::iter::Iterator;
 
 #[derive(Debug, Clone)]
@@ -44,25 +45,75 @@ impl fmt::Display for ParseError {
 impl Error for ParseError {}
 
 /// An interface for reading lines of UTF-8 texts.
+///
+/// **Important**: It is guaranteed that all lines end in '\n' or `EOF`.
 pub trait LineReader {
     fn read_line(&mut self) -> io::Result<Option<String>>;
+
+    fn ps2_enter(&self, _s: String) {}
+
+    fn ps2_exit(&self) {}
+}
+
+/// A generic, non-interactive [`LineReader`](trait.LineReader.html).
+pub struct FileLineReader<R: Read>(BufReader<R>);
+
+impl<R: Read> FileLineReader<R> {
+    pub fn new(r: R) -> Result<FileLineReader<R>, Box<Error>> {
+        Ok(FileLineReader(BufReader::new(r)))
+    }
+}
+
+impl<R: Read> LineReader for FileLineReader<R> {
+    fn read_line(&mut self) -> io::Result<Option<String>> {
+        let mut s = String::new();
+        self.0.read_line(&mut s)?;
+        if s.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(s))
+        }
+    }
 }
 
 /// A [`LineReader`](trait.LineReader.html) that reads from `stdin` and prints a prompt.
 #[derive(Default, Clone)]
-pub struct InteractiveLineReader(String);
+pub struct InteractiveLineReader {
+    pub ps1: String,
+    pub ps2: String,
+
+    ps2_stack: RefCell<Vec<String>>,
+}
 
 impl InteractiveLineReader {
     pub fn new() -> InteractiveLineReader {
-        InteractiveLineReader(String::new())
+        InteractiveLineReader {
+            ps1: "€ ".to_owned(), // get it? it's like the dollar sign!
+            ps2: "> ".to_owned(),
+
+            ps2_stack: RefCell::new(vec![]),
+        }
     }
 }
 
 impl LineReader for InteractiveLineReader {
     fn read_line(&mut self) -> io::Result<Option<String>> {
-        print!("> ");
+        if self.ps2_stack.borrow().is_empty() {
+            print!("{}", self.ps1);
+        } else {
+            print!(
+                "{}{}",
+                self.ps2_stack
+                    .borrow()
+                    .iter()
+                    .filter(|p| { !p.is_empty() })
+                    .cloned()
+                    .collect::<Vec<String>>()
+                    .join(" "),
+                self.ps2
+            );
+        }
         stdout().flush().unwrap();
-        self.0.clear();
         let mut s = String::new();
 
         match stdin().read_line(&mut s) {
@@ -75,6 +126,13 @@ impl LineReader for InteractiveLineReader {
                 Ok(Some(s))
             }
         }
+    }
+    fn ps2_enter(&self, s: String) {
+        self.ps2_stack.borrow_mut().push(s);
+    }
+
+    fn ps2_exit(&self) {
+        self.ps2_stack.borrow_mut().pop();
     }
 }
 
@@ -150,6 +208,13 @@ impl<R: LineReader> BufReadChars<R> {
             self.peeked = Some(self.next());
         }
         self.peeked.as_ref().unwrap().as_ref()
+    }
+
+    pub fn ps2_enter(&mut self, s: String) {
+        self.r.ps2_enter(s);
+    }
+    pub fn ps2_exit(&mut self) {
+        self.r.ps2_exit();
     }
 }
 

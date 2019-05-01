@@ -98,7 +98,8 @@ impl<R: LineReader> Iterator for Lexer<R> {
                     .new_error("expected pipe, pizza or newline".to_owned())));
             }
         }
-        if let Some(&c) = self.input.peek() {
+        let r = if let Some(&c) = self.input.peek() {
+            self.input.ps2_enter("".to_owned());
             if is_clear_string_char(c) {
                 match read_string('\0', &mut self.input) {
                     Ok(s) => Some(Ok(tok!(
@@ -128,7 +129,8 @@ impl<R: LineReader> Iterator for Lexer<R> {
                 self.input.next();
                 if let Some('>') = self.input.peek() {
                     self.input.next();
-                    match parse_command(&mut self.input, false) {
+                    self.input.ps2_enter("pizza".to_owned());
+                    let r = match parse_command(&mut self.input, false) {
                         Ok(Some(sre)) => {
                             self.pipe_follows = true;
                             Some(Ok(tok!(TokenKind::Pizza(sre), 1, self.input)))
@@ -138,7 +140,9 @@ impl<R: LineReader> Iterator for Lexer<R> {
                             self.errored = true;
                             Some(Err(e))
                         }
-                    }
+                    };
+                    self.input.ps2_exit();
+                    r
                 } else {
                     Some(Ok(tok!(TokenKind::Pipe, 1, self.input)))
                 }
@@ -156,7 +160,9 @@ impl<R: LineReader> Iterator for Lexer<R> {
             }
         } else {
             None
-        }
+        };
+        self.input.ps2_exit();
+        r
     }
 }
 

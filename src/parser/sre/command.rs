@@ -119,7 +119,10 @@ pub fn parse_command<R: LineReader>(
                     }
                 }
                 let command_args = if has_command_argument(name) {
-                    vec![super::parse_command(it, false)?.unwrap()]
+                    it.ps2_enter(format!("{}", name));
+                    let r = vec![super::parse_command(it, false)?.unwrap()];
+                    it.ps2_exit();
+                    r
                 } else {
                     vec![]
                 };
@@ -131,12 +134,14 @@ pub fn parse_command<R: LineReader>(
             }
         }
         Some('{') => {
+            it.ps2_enter("{".to_owned());
             let mut x = super::parse_command(it, true);
             let mut command_args = Vec::new();
             while let Ok(Some(c)) = x {
                 command_args.push(c);
                 x = super::parse_command(it, true);
             }
+            it.ps2_exit();
             if x.is_err() {
                 Err(x.err().unwrap())
             } else {
