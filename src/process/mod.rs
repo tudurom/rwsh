@@ -6,6 +6,7 @@ use std::ffi::{CString, OsStr};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::RawFd;
 use std::process::exit;
+use std::error::Error;
 
 #[derive(Clone, Copy)]
 /// A child process with its ID and `stdout` file descriptor
@@ -64,7 +65,7 @@ where
 ///     println!("Hello, world!");
 /// }, 0, true, true);
 /// ```
-pub fn run_command<F>(body: F, input: RawFd, first: bool, last: bool) -> nix::Result<Child>
+pub fn run_command<F>(body: F, input: RawFd, first: bool, last: bool) -> Result<Child, Box<Error>>
 where
     F: FnOnce(),
 {
@@ -124,7 +125,7 @@ impl PipeRunner {
     ///
     /// If this is the first invocation, `stdin` will be the terminal's.
     /// If this is the last invocation, `stdout` will be the terminal's.
-    pub fn run(&mut self, body: impl FnOnce()) -> nix::Result<Child> {
+    pub fn run(&mut self, body: impl FnOnce()) -> Result<Child, Box<Error>> {
         let stdin = self
             .previous_command
             .map_or(0, |output: Child| output.output);

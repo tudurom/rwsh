@@ -87,7 +87,7 @@ impl<R: LineReader> Iterator for Lexer<R> {
         }
         if self.pipe_follows {
             let peek = self.input.peek();
-            if let Some('|') | Some('\n') = peek {
+            if let Some('|') | Some('\n') | None = peek {
                 self.pipe_follows = false;
             } else if peek.is_some() && peek.unwrap().is_whitespace() {
 

@@ -7,11 +7,25 @@ use std::io::{stdin, stdout};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
+/// The current state of the shell
+struct State {
+    pub exit: u8,
+}
+
+impl State {
+    pub fn new() -> State {
+        State {
+            exit: 0,
+        }
+    }
+}
+
 /// The shell engine with its internal state.
 ///
 /// Use it with an [`InteractiveLineReader`](../util/struct.InteractiveLineReader.html) to get an interactive shell.
 pub struct Shell<R: LineReader> {
     p: Parser<R>,
+    state: State,
 }
 
 impl Shell<InteractiveLineReader> {
@@ -26,7 +40,7 @@ impl<R: LineReader> Shell<R> {
     pub fn new(r: R) -> Shell<R> {
         let buf = BufReadChars::new(r);
         let p = Parser::new(buf);
-        Shell { p }
+        Shell { p, state: State::new() }
     }
 
     /// Start the REPL.

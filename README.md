@@ -1,4 +1,4 @@
-# rwsh 
+# rwsh
 
 [![builds.sr.ht status](https://builds.sr.ht/~tudor/rwsh.svg)](https://builds.sr.ht/~tudor/rwsh?)
 
@@ -13,13 +13,13 @@ This is going to be a UNIX shell based around [Structural Regular Expressions][s
 
 - [x] Basic command execution with quoted string rules
 - [x] Pipes
-- [ ] Structural regular expressions
+- [x] Structural regular expressions
     - [x] Addresses
     - [x] Basic commands (`a`, `c`, `i`, `d`, `p`)
-    - [ ] Loops
+    - [x] Loops
 - [ ] Shell stuff:
     - [ ] Handle signals
-    - [ ] Load scripts
+    - [x] Load scripts
 - [ ] Variables and variable substitution
     - [ ] Arrays / Lists
     - [ ] Maps
