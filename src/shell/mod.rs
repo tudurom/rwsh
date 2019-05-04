@@ -1,22 +1,88 @@
-use crate::parser::{Parser, Pipeline, Task};
-use crate::process::{self, PipeRunner};
-use crate::sre::{Buffer, Invocation};
+use crate::parser::{Parser, Program};
+use crate::task::{Task, TaskStatus};
 use crate::util::{BufReadChars, InteractiveLineReader, LineReader};
-use std::env;
-use std::io::{stdin, stdout};
-use std::path::{Path, PathBuf};
+use nix::sys::wait::WaitStatus;
+use nix::unistd::Pid;
+use std::cell::RefCell;
+use std::error::Error;
 use std::process::exit;
+use std::rc::Rc;
 
+#[derive(Clone)]
 /// The current state of the shell
-struct State {
-    pub exit: u8,
+pub struct State {
+    pub exit: i32,
+    pub processes: Vec<Rc<RefCell<Process>>>,
+}
+
+#[derive(Clone)]
+pub struct Process {
+    pub pid: Pid,
+    pub terminated: bool,
+    pub stat: WaitStatus,
+}
+
+impl Process {
+    pub fn poll(&mut self) -> Result<TaskStatus, String> {
+        if !self.terminated {
+            Ok(TaskStatus::Wait)
+        } else {
+            match self.stat {
+                WaitStatus::Exited(_, code) => Ok(TaskStatus::Success(code)),
+                WaitStatus::Signaled(_, sig, _) => Ok(TaskStatus::Success(unsafe {
+                    std::mem::transmute::<nix::sys::signal::Signal, i32>(sig)
+                })),
+                _ => panic!(),
+            }
+        }
+    }
 }
 
 impl State {
     pub fn new() -> State {
         State {
             exit: 0,
+            processes: Vec::new(),
         }
+    }
+
+    pub fn new_process(&mut self, pid: Pid) -> Rc<RefCell<Process>> {
+        let p = Process {
+            pid,
+            terminated: false,
+            stat: WaitStatus::StillAlive,
+        };
+        self.processes.push(Rc::new(RefCell::new(p)));
+        self.processes.last().unwrap().clone()
+    }
+
+    pub fn update_process(&mut self, pid: Pid, stat: WaitStatus) {
+        let p = self.processes.iter().find(|p| p.borrow().pid == pid);
+        if p.is_none() {
+            return; // poor process got lost
+        }
+        let p = p.unwrap();
+
+        match stat {
+            WaitStatus::Exited(_, _) | WaitStatus::Signaled(_, _, _) => {
+                let mut p = p.borrow_mut();
+                p.terminated = true;
+                p.stat = stat;
+            }
+            _ => {}
+        }
+    }
+}
+
+/// A context holds state information and per-job information.
+/// It is guaranteed to be shared across all members of a job.
+pub struct Context {
+    pub state: State,
+}
+
+impl Context {
+    pub fn get_parameter_value(&self, _name: &str) -> Option<String> {
+        Some("lol".to_owned())
     }
 }
 
@@ -40,15 +106,20 @@ impl<R: LineReader> Shell<R> {
     pub fn new(r: R) -> Shell<R> {
         let buf = BufReadChars::new(r);
         let p = Parser::new(buf);
-        Shell { p, state: State::new() }
+        Shell {
+            p,
+            state: State::new(),
+        }
     }
 
     /// Start the REPL.
     pub fn run(&mut self) {
         for t in self.p.by_ref() {
             if let Ok(p) = t {
-                if let Err(error) = Self::run_pipeline(p) {
-                    eprintln!("{}", error);
+                let state = self.state.clone();
+                match Self::run_program(p, state) {
+                    Ok(status) => self.state.exit = status.0,
+                    Err(error) => eprintln!("{}", error),
                 }
             } else if let Err(e) = t {
                 eprintln!("{}", e);
@@ -57,31 +128,20 @@ impl<R: LineReader> Shell<R> {
         }
     }
 
-    /// `cd` builtin
-    fn do_cd<'a, I>(mut args: I) -> Result<(), String>
-    where
-        I: Iterator<Item = &'a str>,
-    {
-        let dir: &str;
-        let home = "~";
-        if let Some(arg) = args.next() {
-            dir = arg;
-        } else {
-            dir = home;
-        }
-        let path = expand_home(dir);
-        match env::set_current_dir(path) {
-            Err(error) => Err(format!("cd: {}", error)),
-            _ => Ok(()),
-        }
+    fn run_program(p: Program, state: State) -> Result<(i32, Context), Box<Error>> {
+        let mut task = Task::new_from_command_lists(p.0);
+        let mut ctx = Context { state };
+        let r = task.run(&mut ctx)?;
+        Ok((r, ctx))
     }
 
+    /*
     /// Runs a [Pipeline](../parser/struct.Pipeline.html)
-    fn run_pipeline(p: Pipeline) -> Result<(), String> {
+    fn run_pipeline(p: Pipeline) -> Result<i32, String> {
         let mut runner = PipeRunner::new(p.0.len());
-        for task in p.0.iter() {
-            match task {
-                Task::Command(command) => match &command.0 as &str {
+        for pipe in p.0.iter() {
+            match pipe {
+                Pipe::Command(command) => match &command.0 as &str {
                     "cd" => {
                         Self::do_cd(command.1.iter().map(|x| &x[..]))?;
                         runner.run(move || {}).unwrap();
@@ -92,7 +152,7 @@ impl<R: LineReader> Shell<R> {
                         }
                     }
                 },
-                Task::SREProgram(p) => {
+                Pipe::SREProgram(p) => {
                     let mut prev_address = None;
                     runner
                         .run(move || {
@@ -112,32 +172,16 @@ impl<R: LineReader> Shell<R> {
             }
         }
 
-        if let Err(e) = runner.wait() {
-            return Err(format!("rwsh: {}", e));
+        match runner.wait() {
+            Ok(status) => Ok(status),
+            Err(e) => Err(format!("rwsh: {}", e)),
         }
-        Ok(())
     }
+    */
 }
 
 impl Default for Shell<InteractiveLineReader> {
     fn default() -> Self {
         Self::new_interactive()
     }
-}
-
-/// Expands the ~ at the beginning of a path to the user's home directory.
-fn expand_home<P: AsRef<Path>>(path: P) -> PathBuf {
-    let mut new_path = PathBuf::new();
-    let mut it = path.as_ref().iter().peekable();
-
-    if let Some(p) = it.peek() {
-        if *p == "~" {
-            new_path.push(dirs::home_dir().unwrap());
-            it.next();
-        }
-    }
-    for p in it {
-        new_path.push(p);
-    }
-    new_path
 }

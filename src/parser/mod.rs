@@ -8,6 +8,7 @@ use crate::util::{BufReadChars, LineReader, ParseError};
 use sre::Command as SRECommand;
 use std::cell::RefCell;
 use std::iter::Peekable;
+use std::rc::Rc;
 
 fn skip_whitespace<R: LineReader>(it: &mut BufReadChars<R>, skip_newlines: bool) -> usize {
     let mut len: usize = 0;
@@ -31,24 +32,65 @@ pub fn escape(c: char) -> char {
     }
 }
 
-#[derive(Debug, PartialEq)]
-/// A command tuple is made of its name and its arguments.
-pub struct Command(pub String, pub Vec<String>);
+#[derive(Clone, PartialEq, Debug)]
+pub struct WordParameter {
+    pub name: String,
+}
 
-#[derive(Debug, PartialEq)]
+pub type Word = Rc<RefCell<RawWord>>;
+
+pub fn naked_word(mut w: Word) -> RawWord {
+    Rc::make_mut(&mut w).clone().into_inner()
+}
+
+#[derive(Clone, PartialEq, Debug)]
+/// The multiple ways of representing a string in the shell.
+pub enum RawWord {
+    /// An unquoted or single-quoted string.
+    /// Second field is `true` if single-quoted.
+    String(String, bool),
+
+    /// A parameter expansion expression, such as
+    /// `$VAR` or `${VAR}`.
+    Parameter(WordParameter),
+
+    /// An unqoted or double-quoted list of words.
+    List(Vec<Word>, bool),
+}
+
+impl Into<Word> for RawWord {
+    fn into(self) -> Word {
+        Rc::new(RefCell::new(self))
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+/// A command tuple is made of its name and its arguments.
+pub struct Command(pub Word, pub Vec<Word>);
+
+#[derive(Debug, PartialEq, Clone)]
 /// A chain of SRE commands.
 ///
 /// Something like `|> ,a/append/ |> 1,2p`.
 pub struct SRESequence(pub Vec<SRECommand>);
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 /// A chain of [`Task`s](struct.Task.html) piped together
-pub struct Pipeline(pub Vec<Task>);
+pub struct Pipeline(pub Vec<Pipe>);
 
-#[derive(Debug, PartialEq)]
-/// A task is something that will be executed in a pipeline in a process,
+#[derive(Clone)]
+pub enum Node {
+    Pipeline(Pipeline),
+}
+
+pub struct CommandList(pub Node);
+
+pub struct Program(pub Vec<CommandList>);
+
+#[derive(Debug, PartialEq, Clone)]
+/// A pipe is something that will be executed in a pipeline in a process,
 /// either an external command, or a SRE program.
-pub enum Task {
+pub enum Pipe {
     Command(Command),
     SREProgram(SRESequence),
 }
@@ -82,6 +124,22 @@ impl<R: LineReader> Parser<R> {
         self.lexer.borrow_mut().next()
     }
 
+    fn parse_program(&mut self) -> Option<Result<Program, ParseError>> {
+        match self.parse_command_list() {
+            Some(Ok(cl)) => Some(Ok(Program(vec![cl]))),
+            Some(Err(e)) => Some(Err(e.clone())),
+            None => None,
+        }
+    }
+
+    fn parse_command_list(&mut self) -> Option<Result<CommandList, ParseError>> {
+        match self.parse_pipeline() {
+            Some(Ok(p)) => Some(Ok(CommandList(Node::Pipeline(p)))),
+            Some(Err(e)) => Some(Err(e.clone())),
+            None => None,
+        }
+    }
+
     /// Parses a pipeline.
     ///
     /// A pipeline is a chain of piped commands
@@ -93,7 +151,7 @@ impl<R: LineReader> Parser<R> {
     /// Here, there are two commands, `dmesg` and `lolcat`, piped together.
     fn parse_pipeline(&mut self) -> Option<Result<Pipeline, ParseError>> {
         // the grammar is pipeline ::= command pipeline | command
-        match self.parse_task() {
+        match self.parse_pipe() {
             Some(Ok(t)) => {
                 let mut v = vec![t];
                 match self.peek() {
@@ -149,7 +207,7 @@ impl<R: LineReader> Parser<R> {
         }
     }
 
-    fn parse_task(&mut self) -> Option<Result<Task, ParseError>> {
+    fn parse_pipe(&mut self) -> Option<Result<Pipe, ParseError>> {
         self.skip_space(false);
         match self.peek() {
             Some(Ok(lex::Token {
@@ -166,12 +224,12 @@ impl<R: LineReader> Parser<R> {
                     self.next_tok();
                     self.skip_space(true);
                 }
-                Some(Ok(Task::SREProgram(SRESequence(commands))))
+                Some(Ok(Pipe::SREProgram(SRESequence(commands))))
             }
             Some(Ok(lex::Token {
-                kind: lex::TokenKind::WordString(_, _),
+                kind: lex::TokenKind::Word(_),
                 ..
-            })) => self.parse_command().map(|r| r.map(Task::Command)),
+            })) => self.parse_command().map(|r| r.map(Pipe::Command)),
             None => None,
             Some(Err(e)) => Some(Err(e)),
             _ => panic!(),
@@ -184,12 +242,12 @@ impl<R: LineReader> Parser<R> {
     fn parse_command(&mut self) -> Option<Result<Command, ParseError>> {
         match self.parse_word_list() {
             Some(Ok(name)) => {
-                let mut v: Vec<String> = Vec::new();
+                let mut v: Vec<Word> = Vec::new();
                 while let Some(r) = self.peek() {
                     match r {
                         Ok(tok) => match tok {
                             lex::Token {
-                                kind: lex::TokenKind::WordString(_, _),
+                                kind: lex::TokenKind::Word(_),
                                 ..
                             } => match self.parse_word_list() {
                                 Some(Ok(wl)) => {
@@ -246,55 +304,42 @@ impl<R: LineReader> Parser<R> {
         }
         len
     }
-    fn parse_word_list(&mut self) -> Option<Result<String, ParseError>> {
-        let mut r = String::new();
+    fn parse_word_list(&mut self) -> Option<Result<Word, ParseError>> {
         self.skip_space(false);
-        match self.peek() {
-            Some(Ok(lex::Token {
-                kind: lex::TokenKind::WordString(_, _),
-                ..
-            })) => {}
-            Some(Ok(lex::Token { kind, pos, .. })) => {
-                return Some(Err(ParseError {
-                    line: pos.0,
-                    col: pos.1,
-                    message: format!("unexpected token {:?} in word list", kind),
-                }));
-            }
-            _ => {}
-        }
+        let mut v = Vec::new();
         while let Some(Ok(lex::Token {
-            kind: lex::TokenKind::WordString(_, s),
+            kind: lex::TokenKind::Word(word),
             ..
         })) = self.peek()
         {
-            r.push_str(&s);
+            v.push(word);
             self.next_tok();
         }
         if let Some(Err(e)) = self.peek() {
             Some(Err(e.clone()))
-        } else if r.is_empty() {
+        } else if v.is_empty() {
             None
         } else {
-            Some(Ok(r))
+            Some(Ok(RawWord::List(v, false).into()))
         }
     }
 }
 
 impl<R: LineReader> Iterator for Parser<R> {
-    type Item = Result<Pipeline, ParseError>;
+    type Item = Result<Program, ParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.error.is_some() {
             return None;
         }
-        self.parse_pipeline()
+        self.parse_program()
     }
 }
 
 #[cfg(test)]
 pub mod tests {
-    use super::{Command, Pipeline, Task};
+    /*
+    use super::{Command, Pipe, Pipeline};
     use crate::tests::common::new_dummy_buf;
     use crate::util::ParseError;
 
@@ -323,14 +368,14 @@ pub mod tests {
         let s = "   dmesg --facility daemon| lolcat |   cat -v  \n\nmeow\n"; // useless use of cat!
         let mut p = super::Parser::new(new_dummy_buf(s.lines()));
         let ok1: Option<Result<Pipeline, ParseError>> = Some(Ok(Pipeline(vec![
-            Task::Command(Command(
+            Pipe::Command(Command(
                 "dmesg".to_owned(),
                 vec!["--facility".to_owned(), "daemon".to_owned()],
             )),
-            Task::Command(Command("lolcat".to_owned(), vec![])),
-            Task::Command(Command("cat".to_owned(), vec!["-v".to_owned()])),
+            Pipe::Command(Command("lolcat".to_owned(), vec![])),
+            Pipe::Command(Command("cat".to_owned(), vec!["-v".to_owned()])),
         ])));
-        let ok2: Option<Result<Pipeline, ParseError>> = Some(Ok(Pipeline(vec![Task::Command(
+        let ok2: Option<Result<Pipeline, ParseError>> = Some(Ok(Pipeline(vec![Pipe::Command(
             Command("meow".to_owned(), vec![]),
         )])));
         assert_eq!(p.parse_pipeline(), ok1);
@@ -341,11 +386,12 @@ pub mod tests {
     fn parse_task() {
         let s = "|> 2,3a/something/    |> ,p";
         let mut p = super::Parser::new(new_dummy_buf(s.lines()));
-        let task = p.parse_task();
-        if let Some(Ok(super::Task::SREProgram(seq))) = task {
+        let task = p.parse_pipe();
+        if let Some(Ok(super::Pipe::SREProgram(seq))) = task {
             assert_eq!(seq.0.len(), 2);
         } else {
             panic!(task);
         }
     }
+    */
 }

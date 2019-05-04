@@ -16,4 +16,4 @@ tasks:
       cargo test --verbose
   - push_to_github: |
       cd rwsh
-      git push "https://tudurom:$(cat ~/.gh_pass)@github.com/tudurom/rwsh" master
+      git push --all "https://tudurom:$(cat ~/.gh_pass)@github.com/tudurom/rwsh"
