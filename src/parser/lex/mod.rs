@@ -115,14 +115,6 @@ impl<R: LineReader> Iterator for Lexer<R> {
                 Some(Err(self
                     .input
                     .new_error("words can't start with digits".to_owned())))
-            } else if is_clear_string_char(c) || c == '\'' || c == '"' {
-                match read_word(&mut self.input) {
-                    Ok(t) => Some(Ok(t)),
-                    Err(e) => {
-                        self.errored = true;
-                        Some(Err(e))
-                    }
-                }
             } else if c == '|' {
                 self.input.next();
                 if let Some('>') = self.input.peek() {
@@ -151,10 +143,13 @@ impl<R: LineReader> Iterator for Lexer<R> {
                 let len = skip_whitespace(&mut self.input, false);
                 Some(Ok(tok!(TokenKind::Space, len, self.input)))
             } else {
-                self.errored = true;
-                Some(Err(self
-                    .input
-                    .new_error(format!("unexpected character {}", c))))
+                match read_word(&mut self.input) {
+                    Ok(t) => Some(Ok(t)),
+                    Err(e) => {
+                        self.errored = true;
+                        Some(Err(e))
+                    }
+                }
             }
         } else {
             None
@@ -165,7 +160,7 @@ impl<R: LineReader> Iterator for Lexer<R> {
 }
 
 fn is_special_char(c: char) -> bool {
-    c == '|' || c == '\'' || c == '\"' || c == '&'
+    c == '|' || c == '\'' || c == '\"' || c == '&' || c == '$'
 }
 
 fn is_clear_string_char(c: char) -> bool {
@@ -187,6 +182,10 @@ fn read_word<R: LineReader>(it: &mut BufReadChars<R>) -> Result<Token, ParseErro
     match it.peek().unwrap() {
         '\'' => read_word_string(it, WordStringReadMode::SingleQuoted),
         '"' => read_double_quoted(it),
+        '$' => {
+            let p = read_word_parameter(it)?;
+            Ok(tok!(TokenKind::Word(RawWord::Parameter(p.0).into()), p.1, it))
+        },
         &c if is_clear_string_char(c) => read_word_string(it, WordStringReadMode::Unqoted),
         &c => Err(it.new_error(format!("unexpected character '{}'", c))),
     }
@@ -306,13 +305,13 @@ fn read_word_parameter<R: LineReader>(
         Err(it.new_error(format!("expected word, got {}", got)))
     } else {
         use std::ops::Deref;
-        if let TokenKind::Word(w /*RawWord::String(name, _)*/) = tok.kind {
+        if let TokenKind::Word(w) = tok.kind {
             if let RawWord::String(name, _) = w.borrow().deref() {
                 Ok((
                     WordParameter {
                         name: name.to_string(),
                     },
-                    tok.len,
+                    tok.len + 1,
                 ))
             } else {
                 panic!()

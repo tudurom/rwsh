@@ -355,17 +355,20 @@ impl Word {
 
 impl TaskImpl for Word {
     fn poll(&mut self, ctx: &mut Context) -> Result<TaskStatus, String> {
+        let mut to_replace;
         match self.word.borrow().deref() {
-            parser::RawWord::String(s, _) => Ok(TaskStatus::Success(0)),
+            parser::RawWord::String(s, _) => return Ok(TaskStatus::Success(0)),
             parser::RawWord::Parameter(param) => {
                 let mut val = ctx.get_parameter_value(&param.name);
                 if val.is_none() {
                     val = Some(String::new());
                 }
-                *self.word.borrow_mut() = parser::RawWord::String(val.unwrap(), false);
-                Ok(TaskStatus::Success(0))
+                //*self.word.borrow_mut()
+                to_replace = Some(parser::RawWord::String(val.unwrap(), false));
             }
             _ => panic!(),
         }
+        *self.word.borrow_mut() = to_replace.unwrap();
+        Ok(TaskStatus::Success(0))
     }
 }
