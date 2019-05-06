@@ -78,7 +78,7 @@ pub struct SRESequence(pub Vec<SRECommand>);
 /// A chain of [`Task`s](struct.Task.html) piped together
 pub struct Pipeline(pub Vec<Pipe>);
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub enum Node {
     Pipeline(Pipeline),
 }

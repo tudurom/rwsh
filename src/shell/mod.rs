@@ -8,34 +8,11 @@ use std::error::Error;
 use std::process::exit;
 use std::rc::Rc;
 
-#[derive(Clone)]
+#[derive(Clone,Default)]
 /// The current state of the shell
 pub struct State {
     pub exit: i32,
     pub processes: Vec<Rc<RefCell<Process>>>,
-}
-
-#[derive(Clone)]
-pub struct Process {
-    pub pid: Pid,
-    pub terminated: bool,
-    pub stat: WaitStatus,
-}
-
-impl Process {
-    pub fn poll(&mut self) -> Result<TaskStatus, String> {
-        if !self.terminated {
-            Ok(TaskStatus::Wait)
-        } else {
-            match self.stat {
-                WaitStatus::Exited(_, code) => Ok(TaskStatus::Success(code)),
-                WaitStatus::Signaled(_, sig, _) => Ok(TaskStatus::Success(unsafe {
-                    std::mem::transmute::<nix::sys::signal::Signal, i32>(sig)
-                })),
-                _ => panic!(),
-            }
-        }
-    }
 }
 
 impl State {
@@ -70,6 +47,29 @@ impl State {
                 p.stat = stat;
             }
             _ => {}
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Process {
+    pub pid: Pid,
+    pub terminated: bool,
+    pub stat: WaitStatus,
+}
+
+impl Process {
+    pub fn poll(&mut self) -> Result<TaskStatus, String> {
+        if !self.terminated {
+            Ok(TaskStatus::Wait)
+        } else {
+            match self.stat {
+                WaitStatus::Exited(_, code) => Ok(TaskStatus::Success(code)),
+                WaitStatus::Signaled(_, sig, _) => Ok(TaskStatus::Success(unsafe {
+                    std::mem::transmute::<nix::sys::signal::Signal, i32>(sig)
+                })),
+                _ => panic!(),
+            }
         }
     }
 }

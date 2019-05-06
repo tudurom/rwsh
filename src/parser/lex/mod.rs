@@ -184,8 +184,12 @@ fn read_word<R: LineReader>(it: &mut BufReadChars<R>) -> Result<Token, ParseErro
         '"' => read_double_quoted(it),
         '$' => {
             let p = read_word_parameter(it)?;
-            Ok(tok!(TokenKind::Word(RawWord::Parameter(p.0).into()), p.1, it))
-        },
+            Ok(tok!(
+                TokenKind::Word(RawWord::Parameter(p.0).into()),
+                p.1,
+                it
+            ))
+        }
         &c if is_clear_string_char(c) => read_word_string(it, WordStringReadMode::Unqoted),
         &c => Err(it.new_error(format!("unexpected character '{}'", c))),
     }
@@ -407,7 +411,7 @@ mod tests {
                 crate::parser::WordParameter {
                     name: "PARAM".to_owned()
                 },
-                5 // the length
+                6 // the length
             )
         );
     }

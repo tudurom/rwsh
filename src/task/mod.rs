@@ -1,17 +1,17 @@
 use crate::builtin;
 use crate::parser;
-use crate::shell::Context;
-use crate::shell::Process;
+use crate::shell::{Context, Process};
 use crate::sre::{Buffer, Invocation};
 use nix::sys::wait;
 use nix::unistd;
 use std::cell::RefCell;
 use std::error::Error;
-use std::ffi::{CString, OsStr};
+use std::ffi::{CStr, CString, OsStr};
 use std::io::{stdin, stdout};
 use std::ops::Deref;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::AsRawFd;
+use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 
 fn os2c(s: &OsStr) -> CString {
@@ -131,6 +131,7 @@ pub trait TaskImpl {
     fn poll(&mut self, ctx: &mut Context) -> Result<TaskStatus, String>;
 }
 
+#[derive(Default)]
 pub struct TaskList {
     children: Vec<Task>,
     current: usize,
@@ -164,6 +165,7 @@ impl TaskImpl for TaskList {
     }
 }
 
+#[derive(Default)]
 pub struct Pipeline {
     children: Vec<Task>,
     started: bool,
@@ -178,14 +180,16 @@ impl Pipeline {
     }
 
     fn start(&mut self, ctx: &mut Context) -> Result<(), String> {
-        let mut dup_stdin = -1;
-        let mut dup_stdout = -1;
-        if self.children.len() > 1 {
-            dup_stdin = unistd::dup(stdin().as_raw_fd())
-                .map_err(|e| format!("failed to duplicate stdin: {}", e))?;
-            dup_stdout = unistd::dup(stdout().as_raw_fd())
-                .map_err(|e| format!("failed to duplicate stdout: {}", e))?;
-        }
+        let (dup_stdin, dup_stdout) = if self.children.len() > 1 {
+            (
+                unistd::dup(stdin().as_raw_fd())
+                    .map_err(|e| format!("failed to duplicate stdin: {}", e))?,
+                unistd::dup(stdout().as_raw_fd())
+                    .map_err(|e| format!("failed to duplicate stdout: {}", e))?,
+            )
+        } else {
+            (-1, -1)
+        };
 
         let mut last_stdout = -1;
         let len = self.children.len();
@@ -196,13 +200,14 @@ impl Pipeline {
                 unistd::close(last_stdout).unwrap();
             }
 
-            let mut new_stdout = dup_stdout;
-            if i < len - 1 {
+            let new_stdout = if i < len - 1 {
                 let (read_pipe, write_pipe) =
                     unistd::pipe().map_err(|e| format!("failed to pipe: {}", e))?;
                 last_stdout = read_pipe;
-                new_stdout = write_pipe;
-            }
+                write_pipe
+            } else {
+                dup_stdout
+            };
 
             if new_stdout >= 0 {
                 unistd::dup2(new_stdout, stdout().as_raw_fd())
@@ -314,10 +319,15 @@ impl Command {
     }
 
     fn builtin_poll(&mut self, ctx: &mut Context) -> Result<TaskStatus, String> {
-        unimplemented!()
+        assert!(!self.started);
+        let b = crate::builtin::get_builtin(&self.args[0]).unwrap();
+        Ok(TaskStatus::Success((b.func)(
+            &mut ctx.state,
+            self.args.iter().map(|s| &**s).collect::<Vec<&str>>(),
+        )))
     }
 
-    fn get_args(&mut self, ctx: &Context) {
+    fn get_args(&mut self, _ctx: &Context) {
         self.args.push(word_to_str(self.cmd.0.clone()));
         for arg in &self.cmd.1 {
             self.args.push(word_to_str(arg.clone()));
@@ -403,11 +413,63 @@ impl Word {
     }
 }
 
+fn get_pw_dir(user: &str) -> Result<PathBuf, String> {
+    unsafe {
+        nix::errno::Errno::clear();
+        let p = libc::getpwnam(CString::new(user).unwrap().as_c_str().as_ptr());
+        if p.is_null() {
+            if nix::errno::errno() == 0 {
+                Err("couldn't get home dir: no such user".to_owned())
+            } else {
+                Err(format!(
+                    "couldn't get home dir: {}",
+                    nix::errno::Errno::last().desc(),
+                ))
+            }
+        } else {
+            let mut buf = PathBuf::new();
+            let dir = CStr::from_ptr((*p).pw_dir);
+            buf.push(dir.to_str().unwrap());
+            Ok(buf)
+        }
+    }
+}
+
+fn expand_tilde(s: &mut String) -> Result<(), String> {
+    if s.as_bytes()[0] != b'~' {
+        return Ok(());
+    }
+    let mut buf = PathBuf::new();
+    let mut components = Path::new(&s[1..]).components().peekable();
+    match components.peek() {
+        None => buf.push(dirs::home_dir().unwrap()),
+        Some(p) => {
+            if let Component::RootDir = p {
+                buf.push(dirs::home_dir().unwrap());
+            } else {
+                buf.push(get_pw_dir(p.as_os_str().to_str().unwrap())?);
+            }
+            components.next();
+        }
+    }
+    for c in components {
+        buf.push(c);
+    }
+    *s = buf.to_str().unwrap().to_owned();
+    Ok(())
+}
+
 impl TaskImpl for Word {
     fn poll(&mut self, ctx: &mut Context) -> Result<TaskStatus, String> {
         let mut to_replace;
-        match self.word.borrow().deref() {
-            parser::RawWord::String(s, _) => return Ok(TaskStatus::Success(0)),
+        use std::ops::DerefMut;
+        match self.word.borrow_mut().deref_mut() {
+            parser::RawWord::String(ref mut s, _) => {
+                if self.expand_tilde {
+                    expand_tilde(s)?;
+                }
+                return Ok(TaskStatus::Success(0));
+            }
             parser::RawWord::Parameter(param) => {
                 let mut val = ctx.get_parameter_value(&param.name);
                 if val.is_none() {

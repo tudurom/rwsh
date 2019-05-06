@@ -23,7 +23,7 @@ pub fn get_builtin(name: &str) -> Option<Builtin> {
         .map(|i| BULTINS[i])
 }
 
-fn cd(state: &mut State, args: Vec<&str>) -> i32 {
+fn cd(_state: &mut State, args: Vec<&str>) -> i32 {
     let mut dir;
     let home = dirs::home_dir().unwrap();
     if let Some(arg) = args.get(1) {
@@ -32,13 +32,10 @@ fn cd(state: &mut State, args: Vec<&str>) -> i32 {
     } else {
         dir = home;
     }
-    match std::env::set_current_dir(dir) {
-        Err(error) => {
-            eprintln!("cd: {}", error);
-            return 1;
-        }
-        _ => {}
+    if let Err(error) = std::env::set_current_dir(dir) {
+        eprintln!("cd: {}", error);
+        1
+    } else {
+        0
     }
-
-    0
 }
