@@ -7,12 +7,36 @@ use std::cell::RefCell;
 use std::error::Error;
 use std::process::exit;
 use std::rc::Rc;
+use std::collections::HashMap;
+use std::env;
+
+#[derive(Clone,Debug)]
+pub enum Var {
+    String(String),
+}
+
+impl std::string::ToString for Var {
+    fn to_string(&self) -> String {
+        match self {
+            Var::String(s) => s.clone(),
+        }
+    }
+}
 
 #[derive(Clone,Default)]
 /// The current state of the shell
 pub struct State {
     pub exit: i32,
     pub processes: Vec<Rc<RefCell<Process>>>,
+    pub vars: HashMap<String, Var>,
+}
+
+fn read_vars() -> HashMap<String, Var> {
+    let mut v = HashMap::new();
+    for (key, value) in env::vars() {
+        v.insert(key, Var::String(value));
+    }
+    v
 }
 
 impl State {
@@ -20,6 +44,7 @@ impl State {
         State {
             exit: 0,
             processes: Vec::new(),
+            vars: read_vars(),
         }
     }
 
@@ -81,8 +106,8 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn get_parameter_value(&self, _name: &str) -> Option<String> {
-        Some("lol".to_owned())
+    pub fn get_parameter_value(&self, name: &str) -> Option<String> {
+        self.state.vars.get(name).map(|v| v.to_string())
     }
 }
 
