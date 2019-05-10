@@ -2,8 +2,9 @@
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
-use std::io::{self, stdin, stdout, BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Read};
 use std::iter::Iterator;
+use rustyline::{Editor,error::ReadlineError,config::Builder};
 
 #[derive(Debug, Clone)]
 /// ParseError is a kind of error that appears while parsing.
@@ -48,7 +49,7 @@ impl Error for ParseError {}
 ///
 /// **Important**: It is guaranteed that all lines end in '\n' or `EOF`.
 pub trait LineReader {
-    fn read_line(&mut self) -> io::Result<Option<String>>;
+    fn read_line(&mut self) -> Result<Option<String>, Box<Error>>;
 
     fn ps2_enter(&self, _s: String) {}
 
@@ -65,7 +66,7 @@ impl<R: Read> FileLineReader<R> {
 }
 
 impl<R: Read> LineReader for FileLineReader<R> {
-    fn read_line(&mut self) -> io::Result<Option<String>> {
+    fn read_line(&mut self) -> Result<Option<String>, Box<Error>> {
         let mut s = String::new();
         self.0.read_line(&mut s)?;
         if s.is_empty() {
@@ -77,12 +78,12 @@ impl<R: Read> LineReader for FileLineReader<R> {
 }
 
 /// A [`LineReader`](trait.LineReader.html) that reads from `stdin` and prints a prompt.
-#[derive(Default, Clone)]
 pub struct InteractiveLineReader {
     pub ps1: String,
     pub ps2: String,
 
     ps2_stack: RefCell<Vec<String>>,
+    rl: Editor<()>,
 }
 
 impl InteractiveLineReader {
@@ -92,16 +93,23 @@ impl InteractiveLineReader {
             ps2: "> ".to_owned(),
 
             ps2_stack: RefCell::new(vec![]),
+            rl: Editor::with_config(Builder::new().auto_add_history(true).build())
         }
     }
 }
 
+impl Default for InteractiveLineReader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LineReader for InteractiveLineReader {
-    fn read_line(&mut self) -> io::Result<Option<String>> {
-        if self.ps2_stack.borrow().is_empty() {
-            print!("{}", self.ps1);
+    fn read_line(&mut self) -> Result<Option<String>, Box<Error>> {
+        let ps = if self.ps2_stack.borrow().is_empty() {
+            self.ps1.clone()
         } else {
-            print!(
+            format!(
                 "{}{}",
                 self.ps2_stack
                     .borrow()
@@ -111,19 +119,24 @@ impl LineReader for InteractiveLineReader {
                     .collect::<Vec<String>>()
                     .join(" "),
                 self.ps2
-            );
-        }
-        stdout().flush().unwrap();
-        let mut s = String::new();
-
-        match stdin().read_line(&mut s) {
-            Err(e) => Err(e),
-            Ok(0) => Ok(None),
-            Ok(_) => {
+            )
+        };
+        let readline = self.rl.readline(&ps);
+        match readline {
+            Ok(mut s) => {
                 if s.chars().last().unwrap_or_default() != '\n' {
                     s.push('\n');
                 }
                 Ok(Some(s))
+            }
+            Err(ReadlineError::Interrupted) => {
+                Ok(Some("\n".to_owned()))
+            }
+            Err(ReadlineError::Eof) => {
+                Ok(None)
+            }
+            Err(err) => {
+                Err(Box::new(err))
             }
         }
     }

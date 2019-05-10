@@ -2,14 +2,14 @@
 use crate::parser::sre::address::{ComposedAddress, Parser};
 use crate::sre::Buffer;
 use crate::util::{BufReadChars, LineReader};
-use std::io;
+use std::error::Error;
 use std::str::Lines;
 
 #[derive(Clone)]
 pub struct DummyLineReader<'a>(pub Lines<'a>);
 
 impl<'a> LineReader for DummyLineReader<'a> {
-    fn read_line(&mut self) -> io::Result<Option<String>> {
+    fn read_line(&mut self) -> Result<Option<String>, Box<Error>> {
         match self.0.next() {
             Some(s) => {
                 let mut s = String::from(s);

@@ -107,7 +107,7 @@ pub struct Context {
 
 impl Context {
     pub fn get_parameter_value(&self, name: &str) -> Option<String> {
-        self.state.vars.get(name).map(|v| v.to_string())
+        self.state.vars.get(name).map(ToString::to_string)
     }
 }
 
