@@ -7,6 +7,10 @@ fn p(w: &mut Write, s: &str) -> std::io::Result<()> {
     write!(w, "{}", s)
 }
 
+fn regex(r: &str) -> Result<regex::Regex, regex::Error> {
+    regex::RegexBuilder::new(r).multi_line(true).build()
+}
+
 #[derive(Debug, PartialEq)]
 pub struct P;
 
@@ -114,7 +118,7 @@ pub struct X(pub String, pub SRECommand, pub bool);
 
 impl<'a> SimpleCommand<'a> for X {
     fn execute(&self, w: &mut Write, buffer: &mut Buffer, dot: Range) -> Result<Range, Box<Error>> {
-        let re = regex::Regex::new(&self.0)?;
+        let re = regex(&self.0)?;
         let mut addresses = Vec::new();
         let mut last_match = 0;
         for m in re.find_iter(&buffer.data[dot.0..dot.1]) {
@@ -167,7 +171,7 @@ pub struct Conditional(pub String, pub SRECommand, pub bool);
 
 impl<'a> SimpleCommand<'a> for Conditional {
     fn execute(&self, w: &mut Write, buffer: &mut Buffer, dot: Range) -> Result<Range, Box<Error>> {
-        let re = regex::Regex::new(&self.0)?;
+        let re = regex(&self.0)?;
         let is_match = re.is_match(&buffer.data[dot.0..dot.1]);
         if is_match == !self.2 {
             let iv = Invocation::new(self.1.clone(), buffer, Some(dot))?;
