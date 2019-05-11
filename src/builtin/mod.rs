@@ -2,8 +2,10 @@ use crate::shell::State;
 
 mod cd;
 mod r#let;
-pub use cd::cd;
-pub use r#let::{r#let,unset};
+mod exit;
+use cd::cd;
+use r#let::{r#let,unset};
+use exit::exit;
 
 type BuiltinFunc = fn(&mut State, Vec<&str>) -> i32;
 
@@ -21,9 +23,10 @@ macro_rules! b {
         }
     }
 }
-static BULTINS: [Builtin; 3] = [
+static BULTINS: [Builtin; 4] = [
     // keep sorted pls
     b!(cd),
+    b!(exit),
     Builtin {
         name: "let",
         func: r#let,
