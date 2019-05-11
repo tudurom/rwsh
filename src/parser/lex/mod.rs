@@ -111,11 +111,7 @@ impl<R: LineReader> Iterator for Lexer<R> {
         }
         let r = if let Some(&c) = self.input.peek() {
             self.input.ps2_enter("".to_owned());
-            if c.is_digit(10) {
-                Some(Err(self
-                    .input
-                    .new_error("words can't start with digits".to_owned())))
-            } else if c == '|' {
+            if c == '|' {
                 self.input.next();
                 if let Some('>') = self.input.peek() {
                     self.input.next();
