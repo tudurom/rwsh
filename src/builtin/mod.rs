@@ -1,5 +1,10 @@
 use crate::shell::State;
 
+mod cd;
+mod r#let;
+pub use cd::cd;
+pub use r#let::{r#let,unset};
+
 type BuiltinFunc = fn(&mut State, Vec<&str>) -> i32;
 
 #[derive(Clone, Copy)]
@@ -8,12 +13,22 @@ pub struct Builtin {
     pub func: BuiltinFunc,
 }
 
-static BULTINS: [Builtin; 1] = [
+macro_rules! b {
+    ($name:ident) => {
+        Builtin {
+            name: stringify!($name),
+            func: $name,
+        }
+    }
+}
+static BULTINS: [Builtin; 3] = [
     // keep sorted pls
+    b!(cd),
     Builtin {
-        name: "cd",
-        func: cd,
+        name: "let",
+        func: r#let,
     },
+    b!(unset),
 ];
 
 pub fn get_builtin(name: &str) -> Option<Builtin> {
@@ -21,21 +36,4 @@ pub fn get_builtin(name: &str) -> Option<Builtin> {
         .binary_search_by(|b| b.name.cmp(name))
         .ok()
         .map(|i| BULTINS[i])
-}
-
-fn cd(_state: &mut State, args: Vec<&str>) -> i32 {
-    let mut dir;
-    let home = dirs::home_dir().unwrap();
-    if let Some(arg) = args.get(1) {
-        dir = std::path::PathBuf::new();
-        dir.push(arg);
-    } else {
-        dir = home;
-    }
-    if let Err(error) = std::env::set_current_dir(dir) {
-        eprintln!("cd: {}", error);
-        1
-    } else {
-        0
-    }
 }

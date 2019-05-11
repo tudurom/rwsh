@@ -1,10 +1,10 @@
 //! Provides functions and types that are used throughout the codebase.
+use rustyline::{config::Builder, error::ReadlineError, Editor};
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
 use std::io::{BufRead, BufReader, Read};
 use std::iter::Iterator;
-use rustyline::{Editor,error::ReadlineError,config::Builder};
 
 #[derive(Debug, Clone)]
 /// ParseError is a kind of error that appears while parsing.
@@ -93,7 +93,7 @@ impl InteractiveLineReader {
             ps2: "> ".to_owned(),
 
             ps2_stack: RefCell::new(vec![]),
-            rl: Editor::with_config(Builder::new().auto_add_history(true).build())
+            rl: Editor::with_config(Builder::new().auto_add_history(true).build()),
         }
     }
 }
@@ -129,15 +129,9 @@ impl LineReader for InteractiveLineReader {
                 }
                 Ok(Some(s))
             }
-            Err(ReadlineError::Interrupted) => {
-                Ok(Some("\n".to_owned()))
-            }
-            Err(ReadlineError::Eof) => {
-                Ok(None)
-            }
-            Err(err) => {
-                Err(Box::new(err))
-            }
+            Err(ReadlineError::Interrupted) => Ok(Some("\n".to_owned())),
+            Err(ReadlineError::Eof) => Ok(None),
+            Err(err) => Err(Box::new(err)),
         }
     }
     fn ps2_enter(&self, s: String) {

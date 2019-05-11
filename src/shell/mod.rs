@@ -4,13 +4,13 @@ use crate::util::{BufReadChars, InteractiveLineReader, LineReader};
 use nix::sys::wait::WaitStatus;
 use nix::unistd::Pid;
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::env;
 use std::error::Error;
 use std::process::exit;
 use std::rc::Rc;
-use std::collections::HashMap;
-use std::env;
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub enum Var {
     String(String),
 }
@@ -23,7 +23,7 @@ impl std::string::ToString for Var {
     }
 }
 
-#[derive(Clone,Default)]
+#[derive(Clone, Default)]
 /// The current state of the shell
 pub struct State {
     pub exit: i32,
@@ -74,6 +74,18 @@ impl State {
             _ => {}
         }
     }
+
+    pub fn set_var(&mut self, key: String, value: Var) {
+        match &value {
+            Var::String(s) => {
+                if s.len() == 0 && self.vars.contains_key(&key) {
+                    self.vars.remove(&key);
+                } else {
+                    self.vars.insert(key, value);
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -101,11 +113,11 @@ impl Process {
 
 /// A context holds state information and per-job information.
 /// It is guaranteed to be shared across all members of a job.
-pub struct Context {
-    pub state: State,
+pub struct Context<'a> {
+    pub state: &'a mut State,
 }
 
-impl Context {
+impl<'a> Context<'a> {
     pub fn get_parameter_value(&self, name: &str) -> Option<String> {
         self.state.vars.get(name).map(ToString::to_string)
     }
@@ -141,8 +153,7 @@ impl<R: LineReader> Shell<R> {
     pub fn run(&mut self) {
         for t in self.p.by_ref() {
             if let Ok(p) = t {
-                let state = self.state.clone();
-                match Self::run_program(p, state) {
+                match Self::run_program(p, &mut self.state) {
                     Ok(status) => self.state.exit = status.0,
                     Err(error) => eprintln!("{}", error),
                 }
@@ -153,7 +164,7 @@ impl<R: LineReader> Shell<R> {
         }
     }
 
-    fn run_program(p: Program, state: State) -> Result<(i32, Context), Box<Error>> {
+    fn run_program(p: Program, state: &mut State) -> Result<(i32, Context), Box<Error>> {
         let mut task = Task::new_from_command_lists(p.0);
         let mut ctx = Context { state };
         let r = task.run(&mut ctx)?;

@@ -22,7 +22,7 @@ This is going to be a UNIX shell based around [Structural Regular Expressions][s
     - [x] Load scripts
 - [ ] Variables and variable substitution
     - [x] Strings
-    - [ ] Assignment
+    - [x] Assignment
     - [ ] Arrays / Lists
     - [ ] Maps
 - [ ] Control flow structures
