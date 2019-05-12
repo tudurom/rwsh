@@ -3,9 +3,6 @@ use super::*;
 use std::io::Write;
 use std::str::FromStr;
 
-fn p(w: &mut Write, s: &str) -> std::io::Result<()> {
-    write!(w, "{}", s)
-}
 
 fn regex(r: &str) -> Result<regex::Regex, regex::Error> {
     regex::RegexBuilder::new(r).multi_line(true).build()
@@ -16,7 +13,7 @@ pub struct P;
 
 impl<'a> SimpleCommand<'a> for P {
     fn execute(&self, w: &mut Write, buffer: &mut Buffer, dot: Range) -> Result<Range, Box<Error>> {
-        p(w, &buffer.data[dot.0..dot.1])?;
+        write!(w, "{}", &buffer.data[dot.0..dot.1])?;
 
         Ok(dot)
     }

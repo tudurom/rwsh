@@ -66,7 +66,7 @@ impl Task {
         Task::new(Box::new(tw))
     }
 
-    pub fn new_from_command(c: parser::Command) -> Self {
+    pub fn new_from_simple_command(c: parser::SimpleCommand) -> Self {
         let mut tl = TaskList::new();
         let sc = c.clone();
         tl.children.push(Self::new_from_word(sc.0.clone(), true));
@@ -87,8 +87,9 @@ impl Task {
 
         for pi in p.0 {
             tp.children.push(match pi {
-                parser::Pipe::Command(c) => Self::new_from_command(c),
-                parser::Pipe::SREProgram(seq) => Self::new_from_sre_sequence(seq),
+                parser::Command::SimpleCommand(c) => Self::new_from_simple_command(c),
+                parser::Command::SREProgram(seq) => Self::new_from_sre_sequence(seq),
+                parser::Command::BraceGroup(arr) => Self::new_from_command_lists(arr),
             });
         }
 

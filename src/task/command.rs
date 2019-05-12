@@ -10,7 +10,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::rc::Rc;
 
 pub struct Command {
-    cmd: parser::Command,
+    cmd: parser::SimpleCommand,
     started: bool,
     args: Vec<String>,
     t: CommandType,
@@ -23,7 +23,7 @@ pub enum CommandType {
 }
 
 impl Command {
-    pub fn new(cmd: parser::Command) -> Self {
+    pub fn new(cmd: parser::SimpleCommand) -> Self {
         Command {
             cmd,
             started: false,

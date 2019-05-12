@@ -7,7 +7,6 @@ use self::lex::{Lexer, Token};
 use crate::util::{BufReadChars, LineReader, ParseError};
 use sre::Command as SRECommand;
 use std::cell::RefCell;
-use std::iter::Peekable;
 use std::rc::Rc;
 
 fn skip_whitespace<R: LineReader>(it: &mut BufReadChars<R>, skip_newlines: bool) -> usize {
@@ -66,7 +65,7 @@ impl Into<Word> for RawWord {
 
 #[derive(Debug, PartialEq, Clone)]
 /// A command tuple is made of its name and its arguments.
-pub struct Command(pub Word, pub Vec<Word>);
+pub struct SimpleCommand(pub Word, pub Vec<Word>);
 
 #[derive(Debug, PartialEq, Clone)]
 /// A chain of SRE commands.
@@ -75,33 +74,38 @@ pub struct Command(pub Word, pub Vec<Word>);
 pub struct SRESequence(pub Vec<SRECommand>);
 
 #[derive(Debug, PartialEq, Clone)]
-/// A chain of [`Task`s](struct.Task.html) piped together
-pub struct Pipeline(pub Vec<Pipe>);
+/// A chain of [`Command`s](enum.Command.html) piped together
+pub struct Pipeline(pub Vec<Command>);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Node {
     Pipeline(Pipeline),
 }
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq,Clone)]
 pub struct CommandList(pub Node);
 
 #[derive(Debug)]
 pub struct Program(pub Vec<CommandList>);
 
-#[derive(Debug, PartialEq, Clone)]
-/// A pipe is something that will be executed in a pipeline in a process,
-/// either an external command, or a SRE program.
-pub enum Pipe {
-    Command(Command),
+#[derive(Debug,PartialEq,Clone)]
+/// A command can be a simple command, a brace group or a control structure.
+pub enum Command {
+    /// A simple command is the most basic command, like `man 2 ptrace`.
+    SimpleCommand(SimpleCommand),
+    /// A SRE program is code after the pizza operator.
     SREProgram(SRESequence),
+    /// A brace group is code enclosed in brackets.
+    BraceGroup(Vec<CommandList>),
 }
 
 /// Parses the series of [`Token`s](./lex/enum.Token.html) to the AST ([`ParseNode`s](enum.ParseNode.html)).
 #[derive(Clone)]
 pub struct Parser<R: LineReader> {
-    lexer: RefCell<Peekable<Lexer<R>>>,
+    lexer: RefCell<Lexer<R>>,
     error: Option<String>,
+
+    brace_group_level: u32,
 }
 
 impl<R: LineReader> Parser<R> {
@@ -113,8 +117,9 @@ impl<R: LineReader> Parser<R> {
     /// Creates a new parser from a [`Lexer`](./lex/struct.Lexer.html).
     pub fn from_lexer(lexer: Lexer<R>) -> Parser<R> {
         Parser {
-            lexer: RefCell::new(lexer.peekable()),
+            lexer: RefCell::new(lexer),
             error: None,
+            brace_group_level: 0,
         }
     }
 
@@ -153,7 +158,7 @@ impl<R: LineReader> Parser<R> {
     /// Here, there are two commands, `dmesg` and `lolcat`, piped together.
     fn parse_pipeline(&mut self) -> Option<Result<Pipeline, ParseError>> {
         // the grammar is pipeline ::= command pipeline | command
-        match self.parse_pipe() {
+        match self.parse_command() {
             Some(Ok(t)) => {
                 let mut v = vec![t];
                 match self.peek() {
@@ -192,7 +197,7 @@ impl<R: LineReader> Parser<R> {
                             }
                         }
                     }
-                    Some(Ok(tok)) => {
+                    Some(Ok(ref tok)) if !(tok.kind == lex::TokenKind::RBrace && self.brace_group_level > 0) => {
                         return Some(Err(
                             tok.new_error(format!("unexpected token {:?}", tok.kind))
                         ));
@@ -200,7 +205,7 @@ impl<R: LineReader> Parser<R> {
                     Some(Err(e)) => {
                         return Some(Err(e.clone()));
                     }
-                    None => {}
+                    _ => {}
                 }
                 Some(Ok(Pipeline(v)))
             }
@@ -209,7 +214,7 @@ impl<R: LineReader> Parser<R> {
         }
     }
 
-    fn parse_pipe(&mut self) -> Option<Result<Pipe, ParseError>> {
+    fn parse_command(&mut self) -> Option<Result<Command, ParseError>> {
         self.skip_space(false);
         match self.peek() {
             Some(Ok(lex::Token {
@@ -226,12 +231,41 @@ impl<R: LineReader> Parser<R> {
                     self.next_tok();
                     self.skip_space(true);
                 }
-                Some(Ok(Pipe::SREProgram(SRESequence(commands))))
+                Some(Ok(Command::SREProgram(SRESequence(commands))))
+            }
+            Some(Ok(lex::Token {
+                kind: lex::TokenKind::LBrace,
+                ..
+            })) => {
+                self.next_tok();
+                self.brace_group_level += 1;
+                self.lexer.borrow_mut().ps2_enter("brace".to_owned());
+                let mut lists = Vec::<CommandList>::new();
+                while let Some(Ok(tok)) = self.peek() {
+                    if tok.kind == lex::TokenKind::RBrace {
+                        self.next_tok();
+                        break;
+                    }
+                    match self.parse_command_list().unwrap() {
+                        Ok(cl) => lists.push(cl),
+                        Err(e) => return Some(Err(e)),
+                    }
+                }
+                self.brace_group_level -= 1;
+                self.lexer.borrow_mut().ps2_exit();
+                self.skip_space(true);
+                Some(Ok(Command::BraceGroup(lists)))
+            }
+            Some(Ok(lex::Token {
+                kind: lex::TokenKind::RBrace,
+                ..
+            })) => {
+                None
             }
             Some(Ok(lex::Token {
                 kind: lex::TokenKind::Word(_),
                 ..
-            })) => self.parse_command().map(|r| r.map(Pipe::Command)),
+            })) => self.parse_simple_command().map(|r| r.map(Command::SimpleCommand)),
             None => None,
             Some(Err(e)) => Some(Err(e)),
             _ => panic!(),
@@ -241,7 +275,7 @@ impl<R: LineReader> Parser<R> {
     /// Parses a command
     ///
     /// A command is a chain of word lists (strings)
-    fn parse_command(&mut self) -> Option<Result<Command, ParseError>> {
+    fn parse_simple_command(&mut self) -> Option<Result<SimpleCommand, ParseError>> {
         match self.parse_word_list() {
             Some(Ok(name)) => {
                 let mut v: Vec<Word> = Vec::new();
@@ -279,7 +313,7 @@ impl<R: LineReader> Parser<R> {
                         }
                     }
                 }
-                Some(Ok(Command(name, v)))
+                Some(Ok(SimpleCommand(name, v)))
             }
             Some(Err(e)) => Some(Err(e.clone())),
             None => None,

@@ -29,7 +29,7 @@ impl SRESequence {
                 let mut buf = Buffer::new(stdin()).unwrap();
                 for prog in &self.seq.0 {
                     let inv = Invocation::new(prog.clone(), &buf, prev_address).unwrap();
-                    let mut out = Box::new(stdout());
+                    let mut out = stdout();
                     let addr = inv.execute(&mut out, &mut buf).unwrap();
                     use std::io::Write;
                     out.flush().unwrap();

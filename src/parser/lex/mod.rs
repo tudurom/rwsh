@@ -20,6 +20,10 @@ pub enum TokenKind {
     /// The first tuple element is the quote type (`"` or `'`),
     /// or `\0` if none.
     Word(Word),
+    /// Left brace (`{`)
+    LBrace,
+    /// Right brace (`}`)
+    RBrace,
 }
 
 impl TokenKind {
@@ -64,6 +68,8 @@ pub struct Lexer<R: LineReader> {
     input: BufReadChars<R>,
     pipe_follows: bool,
     errored: bool,
+
+    peeked: Option<Option<Result<Token, ParseError>>>
 }
 
 impl<R: LineReader> Lexer<R> {
@@ -74,7 +80,23 @@ impl<R: LineReader> Lexer<R> {
             input,
             pipe_follows: false,
             errored: false,
+            peeked: None,
         }
+    }
+
+    pub fn peek(&mut self) -> Option<&<Self as Iterator>::Item> {
+        if self.peeked.is_none() {
+            self.peeked = Some(self.next());
+        }
+        self.peeked.as_ref().unwrap().as_ref()
+    }
+
+    pub fn ps2_enter(&mut self, s: String) {
+        self.input.ps2_enter(s);
+    }
+
+    pub fn ps2_exit(&mut self) {
+        self.input.ps2_exit();
     }
 }
 
@@ -93,12 +115,15 @@ impl<R: LineReader> Iterator for Lexer<R> {
     type Item = Result<Token, ParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if let Some(v) = self.peeked.take() {
+            return v;
+        }
         if self.errored {
             return None;
         }
         if self.pipe_follows {
             let peek = self.input.peek();
-            if let Some('|') | Some('\n') | None = peek {
+            if let Some('|') | Some('\n') | Some('}') | None = peek {
                 self.pipe_follows = false;
             } else if peek.is_some() && peek.unwrap().is_whitespace() {
 
@@ -135,6 +160,12 @@ impl<R: LineReader> Iterator for Lexer<R> {
             } else if c == '\n' {
                 self.input.next();
                 Some(Ok(tok!(TokenKind::Newline, 0, self.input)))
+            } else if c == '{' {
+                self.input.next();
+                Some(Ok(tok!(TokenKind::LBrace, 1, self.input)))
+            } else if c == '}' {
+                self.input.next();
+                Some(Ok(tok!(TokenKind::RBrace, 1, self.input)))
             } else if c.is_whitespace() {
                 let len = skip_whitespace(&mut self.input, false);
                 Some(Ok(tok!(TokenKind::Space, len, self.input)))
@@ -156,7 +187,7 @@ impl<R: LineReader> Iterator for Lexer<R> {
 }
 
 fn is_special_char(c: char) -> bool {
-    c == '|' || c == '\'' || c == '\"' || c == '&' || c == '$'
+    c == '|' || c == '\'' || c == '\"' || c == '&' || c == '$' || c == '{' || c == '}'
 }
 
 fn is_clear_string_char(c: char) -> bool {
@@ -164,7 +195,8 @@ fn is_clear_string_char(c: char) -> bool {
 }
 
 fn is_parameter_char(c: char) -> bool {
-    c.is_alphanumeric() || c == '_'
+    //c.is_alphanumeric() || c == '_'
+    is_clear_string_char(c) && !is_special_char(c) || c == '_'
 }
 
 enum WordStringReadMode {
