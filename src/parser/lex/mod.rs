@@ -69,7 +69,7 @@ pub struct Lexer<R: LineReader> {
     pipe_follows: bool,
     errored: bool,
 
-    peeked: Option<Option<Result<Token, ParseError>>>
+    peeked: Option<Option<Result<Token, ParseError>>>,
 }
 
 impl<R: LineReader> Lexer<R> {

@@ -170,50 +170,6 @@ impl<R: LineReader> Shell<R> {
         let r = task.run(&mut ctx)?;
         Ok((r, ctx))
     }
-
-    /*
-    /// Runs a [Pipeline](../parser/struct.Pipeline.html)
-    fn run_pipeline(p: Pipeline) -> Result<i32, String> {
-        let mut runner = PipeRunner::new(p.0.len());
-        for pipe in p.0.iter() {
-            match pipe {
-                Pipe::Command(command) => match &command.0 as &str {
-                    "cd" => {
-                        Self::do_cd(command.1.iter().map(|x| &x[..]))?;
-                        runner.run(move || {}).unwrap();
-                    }
-                    name => {
-                        if let Err(e) = runner.run(process::exec(name, command.1.iter())) {
-                            return Err(format!("rwsh: {}", e));
-                        }
-                    }
-                },
-                Pipe::SREProgram(p) => {
-                    let mut prev_address = None;
-                    runner
-                        .run(move || {
-                            let mut buf = Buffer::new(stdin()).unwrap();
-                            for prog in &p.0 {
-                                let inv =
-                                    Invocation::new(prog.clone(), &buf, prev_address).unwrap();
-                                let mut out = Box::new(stdout());
-                                let addr = inv.execute(&mut out, &mut buf).unwrap();
-                                use std::io::Write;
-                                out.flush().unwrap();
-                                prev_address = Some(buf.apply_changes(addr));
-                            }
-                        })
-                        .unwrap();
-                }
-            }
-        }
-
-        match runner.wait() {
-            Ok(status) => Ok(status),
-            Err(e) => Err(format!("rwsh: {}", e)),
-        }
-    }
-    */
 }
 
 impl Default for Shell<InteractiveLineReader> {

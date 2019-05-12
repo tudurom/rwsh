@@ -82,13 +82,13 @@ pub enum Node {
     Pipeline(Pipeline),
 }
 
-#[derive(Debug,PartialEq,Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct CommandList(pub Node);
 
 #[derive(Debug)]
 pub struct Program(pub Vec<CommandList>);
 
-#[derive(Debug,PartialEq,Clone)]
+#[derive(Debug, PartialEq, Clone)]
 /// A command can be a simple command, a brace group or a control structure.
 pub enum Command {
     /// A simple command is the most basic command, like `man 2 ptrace`.
@@ -197,7 +197,9 @@ impl<R: LineReader> Parser<R> {
                             }
                         }
                     }
-                    Some(Ok(ref tok)) if !(tok.kind == lex::TokenKind::RBrace && self.brace_group_level > 0) => {
+                    Some(Ok(ref tok))
+                        if !(tok.kind == lex::TokenKind::RBrace && self.brace_group_level > 0) =>
+                    {
                         return Some(Err(
                             tok.new_error(format!("unexpected token {:?}", tok.kind))
                         ));
@@ -259,13 +261,13 @@ impl<R: LineReader> Parser<R> {
             Some(Ok(lex::Token {
                 kind: lex::TokenKind::RBrace,
                 ..
-            })) => {
-                None
-            }
+            })) => None,
             Some(Ok(lex::Token {
                 kind: lex::TokenKind::Word(_),
                 ..
-            })) => self.parse_simple_command().map(|r| r.map(Command::SimpleCommand)),
+            })) => self
+                .parse_simple_command()
+                .map(|r| r.map(Command::SimpleCommand)),
             None => None,
             Some(Err(e)) => Some(Err(e)),
             _ => panic!(),

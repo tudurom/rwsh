@@ -13,7 +13,7 @@ pub fn exit(_state: &mut State, args: Vec<&str>) -> i32 {
             Err(_) => {
                 eprintln!("exit: exit code not an integer");
                 return 1;
-            },
+            }
         }
     } else {
         process::exit(0);

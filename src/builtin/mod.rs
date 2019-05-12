@@ -1,11 +1,11 @@
 use crate::shell::State;
 
 mod cd;
-mod r#let;
 mod exit;
+mod r#let;
 use cd::cd;
-use r#let::{r#let,unset};
 use exit::exit;
+use r#let::{r#let, unset};
 
 type BuiltinFunc = fn(&mut State, Vec<&str>) -> i32;
 
@@ -21,7 +21,7 @@ macro_rules! b {
             name: stringify!($name),
             func: $name,
         }
-    }
+    };
 }
 static BULTINS: [Builtin; 4] = [
     // keep sorted pls
