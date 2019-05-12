@@ -187,7 +187,7 @@ impl<R: LineReader> Iterator for Lexer<R> {
 }
 
 fn is_special_char(c: char) -> bool {
-    c == '|' || c == '\'' || c == '\"' || c == '&' || c == '$' || c == '{' || c == '}'
+    c == '|' || c == '\'' || c == '\"' || c == '&' || c == '$' || c == '{' || c == '}' || c == '!'
 }
 
 fn is_clear_string_char(c: char) -> bool {
