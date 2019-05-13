@@ -1,9 +1,18 @@
 use crate::shell::State;
 use crate::shell::Var;
 
+fn is_special_var(s: &str) -> bool {
+    s == "" || s == "?"
+}
+
 pub fn r#let(state: &mut State, args: Vec<&str>) -> i32 {
     if args.len() != 3 {
         eprintln!("let: Usage:\nlet <key> <value>");
+        return 1;
+    }
+
+    if is_special_var(args[1]) {
+        eprintln!("let: cannot change special variable");
         return 1;
     }
 
@@ -14,6 +23,11 @@ pub fn r#let(state: &mut State, args: Vec<&str>) -> i32 {
 pub fn unset(state: &mut State, args: Vec<&str>) -> i32 {
     if args.len() != 2 {
         eprintln!("unset: Usage:\nunset <key>");
+        return 1;
+    }
+
+    if is_special_var(args[1]) {
+        eprintln!("unset: cannot change special variable");
         return 1;
     }
 
