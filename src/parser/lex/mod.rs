@@ -329,12 +329,12 @@ fn read_word_parameter<R: LineReader>(
     }
     let tok = read_word_string(it, WordStringReadMode::Parameter)?;
     if tok.len == 0 {
-        let got = if let Some(&c) = it.peek() {
-            c.to_string()
-        } else {
-            "EOF".to_owned()
-        };
-        Err(it.new_error(format!("expected word, got {}", got)))
+        Ok((
+            WordParameter {
+                name: "".to_owned(),
+            },
+            1,
+        ))
     } else {
         use std::ops::Deref;
         if let TokenKind::Word(w) = tok.kind {

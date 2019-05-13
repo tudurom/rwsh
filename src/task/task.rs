@@ -34,6 +34,7 @@ impl Task {
         loop {
             let p = self.poll(ctx)?;
             if let TaskStatus::Success(code) = p {
+                ctx.state.last_status = code;
                 return Ok(code);
             }
             let stat = wait::waitpid(None, None)?;

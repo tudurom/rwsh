@@ -29,6 +29,7 @@ pub struct State {
     pub exit: i32,
     pub processes: Vec<Rc<RefCell<Process>>>,
     pub vars: HashMap<String, Var>,
+    pub last_status: i32,
 }
 
 fn read_vars() -> HashMap<String, Var> {
@@ -43,6 +44,7 @@ impl State {
     pub fn new() -> State {
         State {
             exit: 0,
+            last_status: 0,
             processes: Vec::new(),
             vars: read_vars(),
         }
@@ -61,6 +63,7 @@ impl State {
     pub fn update_process(&mut self, pid: Pid, stat: WaitStatus) {
         let p = self.processes.iter().find(|p| p.borrow().pid == pid);
         if p.is_none() {
+            eprintln!("rwsh: warning: tried to update lot process {}", pid);
             return; // poor process got lost
         }
         let p = p.unwrap();
@@ -102,7 +105,7 @@ impl Process {
         } else {
             match self.stat {
                 WaitStatus::Exited(_, code) => Ok(TaskStatus::Success(code)),
-                WaitStatus::Signaled(_, sig, _) => Ok(TaskStatus::Success(unsafe {
+                WaitStatus::Signaled(_, sig, _) => Ok(TaskStatus::Success(128 + unsafe {
                     std::mem::transmute::<nix::sys::signal::Signal, i32>(sig)
                 })),
                 _ => panic!(),
@@ -119,7 +122,11 @@ pub struct Context<'a> {
 
 impl<'a> Context<'a> {
     pub fn get_parameter_value(&self, name: &str) -> Option<String> {
-        self.state.vars.get(name).map(ToString::to_string)
+        match name {
+            "" => Some("$".to_owned()),
+            "?" => Some(self.state.last_status.to_string()),
+            _ => self.state.vars.get(name).map(ToString::to_string)
+        }
     }
 }
 
@@ -162,6 +169,7 @@ impl<R: LineReader> Shell<R> {
                 exit(1);
             }
         }
+        std::process::exit(self.state.exit);
     }
 
     fn run_program(p: Program, state: &mut State) -> Result<(i32, Context), Box<Error>> {
