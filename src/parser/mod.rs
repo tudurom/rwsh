@@ -104,8 +104,6 @@ pub enum Command {
 pub struct Parser<R: LineReader> {
     lexer: RefCell<Lexer<R>>,
     error: Option<String>,
-
-    brace_group_level: u32,
 }
 
 impl<R: LineReader> Parser<R> {
@@ -119,7 +117,6 @@ impl<R: LineReader> Parser<R> {
         Parser {
             lexer: RefCell::new(lexer),
             error: None,
-            brace_group_level: 0,
         }
     }
 
@@ -197,8 +194,7 @@ impl<R: LineReader> Parser<R> {
                             }
                         }
                     }
-                    Some(Ok(ref tok))
-                        if !(tok.kind == lex::TokenKind::RBrace && self.brace_group_level > 0) =>
+                    Some(Ok(ref tok)) =>
                     {
                         return Some(Err(
                             tok.new_error(format!("unexpected token {:?}", tok.kind))
@@ -240,7 +236,6 @@ impl<R: LineReader> Parser<R> {
                 ..
             })) => {
                 self.next_tok();
-                self.brace_group_level += 1;
                 self.lexer.borrow_mut().ps2_enter("brace".to_owned());
                 let mut lists = Vec::<CommandList>::new();
                 while let Some(Ok(tok)) = self.peek() {
@@ -253,7 +248,6 @@ impl<R: LineReader> Parser<R> {
                         Err(e) => return Some(Err(e)),
                     }
                 }
-                self.brace_group_level -= 1;
                 self.lexer.borrow_mut().ps2_exit();
                 self.skip_space(true);
                 Some(Ok(Command::BraceGroup(lists)))
