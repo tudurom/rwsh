@@ -187,7 +187,7 @@ impl<R: LineReader> Iterator for Lexer<R> {
 }
 
 fn is_special_char(c: char) -> bool {
-    c == '|' || c == '\'' || c == '\"' || c == '&' || c == '$' || c == '{' || c == '}' || c == '!'
+    c == '|' || c == '\'' || c == '\"' || c == '&' || c == '$' || c == '{' || c == '}'
 }
 
 fn is_clear_string_char(c: char) -> bool {
@@ -196,7 +196,7 @@ fn is_clear_string_char(c: char) -> bool {
 
 fn is_parameter_char(c: char) -> bool {
     //c.is_alphanumeric() || c == '_'
-    is_clear_string_char(c) && !is_special_char(c) || c == '_'
+    c == '_' || ((is_clear_string_char(c) && !is_special_char(c) || c == '_') && !c.is_ascii_punctuation())
 }
 
 enum WordStringReadMode {

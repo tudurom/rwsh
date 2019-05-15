@@ -370,29 +370,35 @@ impl<R: LineReader> Iterator for Parser<R> {
 
 #[cfg(test)]
 pub mod tests {
-    /*
-    use super::{Command, Pipe, Pipeline};
     use crate::tests::common::new_dummy_buf;
-    use crate::util::ParseError;
+    use super::{SimpleCommand,ParseError,RawWord,Pipeline,Command};
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
+    macro_rules! word {
+        ($str:expr) => {word!($str, false)};
+        ($str:expr, $quote:expr) => {
+            Rc::new(RefCell::new(
+                    RawWord::List(vec![
+                        Rc::new(RefCell::new(RawWord::String($str, $quote)))
+                    ], false)
+            ))
+        }
+    }
     #[test]
     fn parse_simple_command() {
-        let s = "echo Hello,\\ w\"or\"ld\\! This is a 't''e''s''t'.\n\nextra command\n\n\n";
+        let s = "echo 'Hello, world!'\nextra command";
         let mut p = super::Parser::new(new_dummy_buf(s.lines()));
-        let ok1: Option<Result<Command, ParseError>> = Some(Ok(Command(
-            "echo".to_owned(),
+        let ok1: Option<Result<SimpleCommand, ParseError>> = Some(Ok(SimpleCommand(
+            word!("echo".to_owned()),
             vec![
-                "Hello, world!".to_owned(),
-                "This".to_owned(),
-                "is".to_owned(),
-                "a".to_owned(),
-                "test.".to_owned(),
+                word!("Hello, world!".to_owned(), true),
             ],
         )));
-        let ok2: Option<Result<Command, ParseError>> =
-            Some(Ok(Command("extra".to_owned(), vec!["command".to_owned()])));
-        assert_eq!(p.parse_command(), ok1);
-        assert_eq!(p.parse_command(), ok2);
+        let ok2: Option<Result<SimpleCommand, ParseError>> =
+            Some(Ok(SimpleCommand(word!("extra".to_owned()), vec![word!("command".to_owned())])));
+        assert_eq!(p.parse_simple_command(), ok1);
+        assert_eq!(p.parse_simple_command(), ok2);
     }
 
     #[test]
@@ -400,30 +406,37 @@ pub mod tests {
         let s = "   dmesg --facility daemon| lolcat |   cat -v  \n\nmeow\n"; // useless use of cat!
         let mut p = super::Parser::new(new_dummy_buf(s.lines()));
         let ok1: Option<Result<Pipeline, ParseError>> = Some(Ok(Pipeline(vec![
-            Pipe::Command(Command(
-                "dmesg".to_owned(),
-                vec!["--facility".to_owned(), "daemon".to_owned()],
+            Command::SimpleCommand(SimpleCommand(
+                word!("dmesg".to_owned()),
+                vec![word!("--facility".to_owned()), word!("daemon".to_owned())],
             )),
-            Pipe::Command(Command("lolcat".to_owned(), vec![])),
-            Pipe::Command(Command("cat".to_owned(), vec!["-v".to_owned()])),
+            Command::SimpleCommand(SimpleCommand(word!("lolcat".to_owned()), vec![])),
+            Command::SimpleCommand(SimpleCommand(word!("cat".to_owned()), vec![word!("-v".to_owned())])),
         ])));
-        let ok2: Option<Result<Pipeline, ParseError>> = Some(Ok(Pipeline(vec![Pipe::Command(
-            Command("meow".to_owned(), vec![]),
+        let ok2: Option<Result<Pipeline, ParseError>> = Some(Ok(Pipeline(vec![Command::SimpleCommand(
+            SimpleCommand(word!("meow".to_owned()), vec![]),
         )])));
         assert_eq!(p.parse_pipeline(), ok1);
         assert_eq!(p.parse_pipeline(), ok2);
     }
 
     #[test]
-    fn parse_task() {
+    fn parse_sre_command() {
         let s = "|> 2,3a/something/    |> ,p";
         let mut p = super::Parser::new(new_dummy_buf(s.lines()));
-        let task = p.parse_pipe();
-        if let Some(Ok(super::Pipe::SREProgram(seq))) = task {
+        let task = p.parse_command();
+        if let Some(Ok(super::Command::SREProgram(seq))) = task {
             assert_eq!(seq.0.len(), 2);
         } else {
-            panic!(task);
+            println!("{:#?}", task);
+            panic!();
         }
     }
-    */
+
+    #[test]
+    fn iterator() {
+        let p = super::Parser::new(new_dummy_buf("dmesg |> 2,3p\necho 'All ok'\n".lines()));
+        let progs = p.collect::<Vec<_>>();
+        assert_eq!(progs.len(), 2);
+    }
 }
