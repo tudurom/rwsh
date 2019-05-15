@@ -91,6 +91,7 @@ impl Task {
                 parser::Command::SimpleCommand(c) => Self::new_from_simple_command(c),
                 parser::Command::SREProgram(seq) => Self::new_from_sre_sequence(seq),
                 parser::Command::BraceGroup(arr) => Self::new_from_command_lists(arr),
+                _ => unimplemented!(),
             });
         }
 

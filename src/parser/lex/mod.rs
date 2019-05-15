@@ -24,6 +24,10 @@ pub enum TokenKind {
     LBrace,
     /// Right brace (`}`)
     RBrace,
+    /// Left parenthesis
+    LParen,
+    /// Right parenthesis
+    RParen,
 }
 
 impl TokenKind {
@@ -134,8 +138,24 @@ impl<R: LineReader> Iterator for Lexer<R> {
                     .new_error("expected pipe, pizza or newline".to_owned())));
             }
         }
-        let r = if let Some(&c) = self.input.peek() {
+        let r = if let Some(&the_c) = self.input.peek() {
             self.input.ps2_enter("".to_owned());
+            let c = if the_c == '#' {
+                self.input.next();
+                while let Some(&some_c) = self.input.peek() {
+                    if some_c == '\n' {
+                        break;
+                    }
+                    self.input.next();
+                }
+                if let Some(&new_c) = self.input.peek() {
+                    new_c
+                } else {
+                    return None;
+                }
+            } else {
+                the_c
+            };
             if c == '|' {
                 self.input.next();
                 if let Some('>') = self.input.peek() {
@@ -166,6 +186,12 @@ impl<R: LineReader> Iterator for Lexer<R> {
             } else if c == '}' {
                 self.input.next();
                 Some(Ok(tok!(TokenKind::RBrace, 1, self.input)))
+            } else if c == '(' {
+                self.input.next();
+                Some(Ok(tok!(TokenKind::LParen, 1, self.input)))
+            } else if c == ')' {
+                self.input.next();
+                Some(Ok(tok!(TokenKind::RParen, 1, self.input)))
             } else if c.is_whitespace() {
                 let len = skip_whitespace(&mut self.input, false);
                 Some(Ok(tok!(TokenKind::Space, len, self.input)))
@@ -187,7 +213,15 @@ impl<R: LineReader> Iterator for Lexer<R> {
 }
 
 fn is_special_char(c: char) -> bool {
-    c == '|' || c == '\'' || c == '\"' || c == '&' || c == '$' || c == '{' || c == '}'
+    c == '|'
+        || c == '\''
+        || c == '\"'
+        || c == '&'
+        || c == '$'
+        || c == '{'
+        || c == '}'
+        || c == '('
+        || c == ')'
 }
 
 fn is_clear_string_char(c: char) -> bool {
@@ -196,7 +230,9 @@ fn is_clear_string_char(c: char) -> bool {
 
 fn is_parameter_char(c: char) -> bool {
     //c.is_alphanumeric() || c == '_'
-    c == '_' || ((is_clear_string_char(c) && !is_special_char(c) || c == '_') && !c.is_ascii_punctuation())
+    c == '_'
+        || ((is_clear_string_char(c) && !is_special_char(c) || c == '_')
+            && !c.is_ascii_punctuation())
 }
 
 enum WordStringReadMode {

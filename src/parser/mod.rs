@@ -21,6 +21,27 @@ fn skip_whitespace<R: LineReader>(it: &mut BufReadChars<R>, skip_newlines: bool)
     len
 }
 
+fn check_condition_symbol(
+    x: Option<Result<Token, ParseError>>,
+    ch: char,
+    kind: lex::TokenKind,
+    construct: &'static str,
+    kw_tok: Token,
+) -> Result<(), ParseError> {
+    match x {
+        Some(Err(e)) => return Err(e),
+        Some(Ok(ref tok @ Token { .. })) if tok.kind != kind => Err(tok.new_error(format!(
+            "expected '{}' in {} condition, got {:?}",
+            ch, construct, tok.kind
+        ))),
+        None => Err(kw_tok.new_error(format!(
+            "expected '{}' in {} condition, got EOF",
+            ch, construct
+        ))),
+        _ => Ok(()),
+    }
+}
+
 pub fn escape(c: char) -> char {
     match c {
         'n' => '\n',
@@ -85,7 +106,7 @@ pub enum Node {
 #[derive(Debug, PartialEq, Clone)]
 pub struct CommandList(pub Node);
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Program(pub Vec<CommandList>);
 
 #[derive(Debug, PartialEq, Clone)]
@@ -97,6 +118,8 @@ pub enum Command {
     SREProgram(SRESequence),
     /// A brace group is code enclosed in brackets.
     BraceGroup(Vec<CommandList>),
+    /// An if construct. First is the condition, second is the body.
+    IfConstruct(Program, CommandList),
 }
 
 /// Parses the series of [`Token`s](./lex/enum.Token.html) to the AST ([`ParseNode`s](enum.ParseNode.html)).
@@ -104,6 +127,8 @@ pub enum Command {
 pub struct Parser<R: LineReader> {
     lexer: RefCell<Lexer<R>>,
     error: Option<String>,
+    brace_group_level: u32,
+    subshell_level: u32,
 }
 
 impl<R: LineReader> Parser<R> {
@@ -117,6 +142,8 @@ impl<R: LineReader> Parser<R> {
         Parser {
             lexer: RefCell::new(lexer),
             error: None,
+            brace_group_level: 0,
+            subshell_level: 0,
         }
     }
 
@@ -157,14 +184,13 @@ impl<R: LineReader> Parser<R> {
         // the grammar is pipeline ::= command pipeline | command
         match self.parse_command() {
             Some(Ok(t)) => {
+                self.lexer.borrow_mut().ps2_enter("pipe".to_owned());
                 let mut v = vec![t];
                 match self.peek() {
                     Some(Ok(lex::Token {
                         kind: lex::TokenKind::Newline,
                         ..
-                    })) => {
-                        self.next_tok();
-                    }
+                    })) => {}
                     Some(Ok(
                         ref tok @ lex::Token {
                             kind: lex::TokenKind::Pipe,
@@ -185,31 +211,71 @@ impl<R: LineReader> Parser<R> {
                                 v.append(new_v);
                             }
                             Some(Err(e)) => {
+                                self.lexer.borrow_mut().ps2_exit();
                                 return Some(Err(e.clone()));
                             }
                             None => {
+                                self.lexer.borrow_mut().ps2_exit();
                                 return Some(Err(
                                     tok.new_error("expected pipeline, got EOF".to_owned())
                                 ));
                             }
                         }
                     }
-                    Some(Ok(ref tok)) =>
-                    {
-                        return Some(Err(
-                            tok.new_error(format!("unexpected token {:?}", tok.kind))
-                        ));
-                    }
                     Some(Err(e)) => {
+                        self.lexer.borrow_mut().ps2_exit();
                         return Some(Err(e.clone()));
                     }
                     _ => {}
                 }
+                self.lexer.borrow_mut().ps2_exit();
                 Some(Ok(Pipeline(v)))
             }
             Some(Err(e)) => Some(Err(e.clone())),
             None => None,
         }
+    }
+
+    fn parse_if(&mut self) -> Option<Result<Command, ParseError>> {
+        let if_tok = self.next_tok().unwrap().unwrap(); // if keyword
+        self.skip_space(false);
+        let lparen = self.next_tok(); // (
+        if let Err(e) = check_condition_symbol(
+            lparen.clone(),
+            '(',
+            lex::TokenKind::LParen,
+            "if",
+            if_tok.clone(),
+        ) {
+            return Some(Err(e));
+        }
+        let prog = match self.parse_program() {
+            None => {
+                return Some(Err(lparen
+                    .unwrap()
+                    .unwrap()
+                    .new_error("expected if condition, got EOF".to_owned())))
+            }
+            Some(Err(e)) => return Some(Err(e)),
+            Some(Ok(p)) => p,
+        };
+        let rparen = self.next_tok(); // )
+        if let Err(e) =
+            check_condition_symbol(rparen.clone(), ')', lex::TokenKind::RParen, "if", if_tok)
+        {
+            return Some(Err(e));
+        }
+        let body = match self.parse_command_list() {
+            None => {
+                return Some(Err(rparen
+                    .unwrap()
+                    .unwrap()
+                    .new_error("expected if body, got EOF".to_owned())))
+            }
+            Some(Err(e)) => return Some(Err(e)),
+            Some(Ok(cl)) => cl,
+        };
+        Some(Ok(Command::IfConstruct(prog, body)))
     }
 
     fn parse_command(&mut self) -> Option<Result<Command, ParseError>> {
@@ -235,19 +301,24 @@ impl<R: LineReader> Parser<R> {
                 kind: lex::TokenKind::LBrace,
                 ..
             })) => {
-                self.next_tok();
+                let mut last = self.next_tok().unwrap().unwrap();
+                self.brace_group_level += 1;
                 self.lexer.borrow_mut().ps2_enter("brace".to_owned());
                 let mut lists = Vec::<CommandList>::new();
                 while let Some(Ok(tok)) = self.peek() {
-                    if tok.kind == lex::TokenKind::RBrace {
-                        self.next_tok();
-                        break;
-                    }
-                    match self.parse_command_list().unwrap() {
-                        Ok(cl) => lists.push(cl),
-                        Err(e) => return Some(Err(e)),
+                    last = tok;
+                    match self.parse_command_list() {
+                        None => break,
+                        Some(Ok(cl)) => lists.push(cl),
+                        Some(Err(e)) => return Some(Err(e)),
                     }
                 }
+                match self.next_tok() {
+                    Some(Ok(Token { .. })) => {}
+                    Some(Err(e)) => return Some(Err(e)),
+                    None => return Some(Err(last.new_error("expected '}', got EOF".to_owned()))),
+                }
+
                 self.lexer.borrow_mut().ps2_exit();
                 self.skip_space(true);
                 Some(Ok(Command::BraceGroup(lists)))
@@ -255,16 +326,30 @@ impl<R: LineReader> Parser<R> {
             Some(Ok(lex::Token {
                 kind: lex::TokenKind::RBrace,
                 ..
-            })) => None,
+            })) if self.brace_group_level > 0 => {
+                self.brace_group_level -= 1;
+                None
+            }
             Some(Ok(lex::Token {
-                kind: lex::TokenKind::Word(_),
+                kind: lex::TokenKind::Word(w),
                 ..
-            })) => self
-                .parse_simple_command()
-                .map(|r| r.map(Command::SimpleCommand)),
+            })) => {
+                use std::ops::Deref;
+                if let RawWord::String(s, false) = w.borrow().deref() {
+                    match s.as_ref() {
+                        "if" => return self.parse_if(),
+                        _ => {}
+                    }
+                }
+                self.parse_simple_command()
+                    .map(|r| r.map(Command::SimpleCommand))
+            }
             None => None,
             Some(Err(e)) => Some(Err(e)),
-            _ => panic!(),
+            Some(x) => {
+                eprintln!("{:#?}", x);
+                panic!()
+            }
         }
     }
 
@@ -370,20 +455,21 @@ impl<R: LineReader> Iterator for Parser<R> {
 
 #[cfg(test)]
 pub mod tests {
+    use super::{Command, ParseError, Pipeline, RawWord, SimpleCommand};
     use crate::tests::common::new_dummy_buf;
-    use super::{SimpleCommand,ParseError,RawWord,Pipeline,Command};
     use std::cell::RefCell;
     use std::rc::Rc;
 
     macro_rules! word {
-        ($str:expr) => {word!($str, false)};
+        ($str:expr) => {
+            word!($str, false)
+        };
         ($str:expr, $quote:expr) => {
-            Rc::new(RefCell::new(
-                    RawWord::List(vec![
-                        Rc::new(RefCell::new(RawWord::String($str, $quote)))
-                    ], false)
-            ))
-        }
+            Rc::new(RefCell::new(RawWord::List(
+                vec![Rc::new(RefCell::new(RawWord::String($str, $quote)))],
+                false,
+            )))
+        };
     }
     #[test]
     fn parse_simple_command() {
@@ -391,12 +477,12 @@ pub mod tests {
         let mut p = super::Parser::new(new_dummy_buf(s.lines()));
         let ok1: Option<Result<SimpleCommand, ParseError>> = Some(Ok(SimpleCommand(
             word!("echo".to_owned()),
-            vec![
-                word!("Hello, world!".to_owned(), true),
-            ],
+            vec![word!("Hello, world!".to_owned(), true)],
         )));
-        let ok2: Option<Result<SimpleCommand, ParseError>> =
-            Some(Ok(SimpleCommand(word!("extra".to_owned()), vec![word!("command".to_owned())])));
+        let ok2: Option<Result<SimpleCommand, ParseError>> = Some(Ok(SimpleCommand(
+            word!("extra".to_owned()),
+            vec![word!("command".to_owned())],
+        )));
         assert_eq!(p.parse_simple_command(), ok1);
         assert_eq!(p.parse_simple_command(), ok2);
     }
@@ -411,11 +497,16 @@ pub mod tests {
                 vec![word!("--facility".to_owned()), word!("daemon".to_owned())],
             )),
             Command::SimpleCommand(SimpleCommand(word!("lolcat".to_owned()), vec![])),
-            Command::SimpleCommand(SimpleCommand(word!("cat".to_owned()), vec![word!("-v".to_owned())])),
+            Command::SimpleCommand(SimpleCommand(
+                word!("cat".to_owned()),
+                vec![word!("-v".to_owned())],
+            )),
         ])));
-        let ok2: Option<Result<Pipeline, ParseError>> = Some(Ok(Pipeline(vec![Command::SimpleCommand(
-            SimpleCommand(word!("meow".to_owned()), vec![]),
-        )])));
+        let ok2: Option<Result<Pipeline, ParseError>> =
+            Some(Ok(Pipeline(vec![Command::SimpleCommand(SimpleCommand(
+                word!("meow".to_owned()),
+                vec![],
+            ))])));
         assert_eq!(p.parse_pipeline(), ok1);
         assert_eq!(p.parse_pipeline(), ok2);
     }

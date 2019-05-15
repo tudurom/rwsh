@@ -105,9 +105,9 @@ impl Process {
         } else {
             match self.stat {
                 WaitStatus::Exited(_, code) => Ok(TaskStatus::Success(code)),
-                WaitStatus::Signaled(_, sig, _) => Ok(TaskStatus::Success(128 + unsafe {
-                    std::mem::transmute::<nix::sys::signal::Signal, i32>(sig)
-                })),
+                WaitStatus::Signaled(_, sig, _) => Ok(TaskStatus::Success(
+                    128 + unsafe { std::mem::transmute::<nix::sys::signal::Signal, i32>(sig) },
+                )),
                 _ => panic!(),
             }
         }
@@ -125,7 +125,7 @@ impl<'a> Context<'a> {
         match name {
             "" => Some("$".to_owned()),
             "?" => Some(self.state.last_status.to_string()),
-            _ => self.state.vars.get(name).map(ToString::to_string)
+            _ => self.state.vars.get(name).map(ToString::to_string),
         }
     }
 }
