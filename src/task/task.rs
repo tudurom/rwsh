@@ -83,6 +83,12 @@ impl Task {
         Task::new(Box::new(SRESequence::new(seq)))
     }
 
+    pub fn new_from_if(condition: parser::Program, body: parser::Program) -> Self {
+        Task::new(Box::new(IfConstruct::new(
+                    Self::new_from_command_lists(condition.0),
+                    Self::new_from_command_lists(body.0))))
+    }
+
     pub fn new_from_pipeline(p: parser::Pipeline) -> Self {
         let mut tp = Pipeline::new();
 
@@ -91,7 +97,7 @@ impl Task {
                 parser::Command::SimpleCommand(c) => Self::new_from_simple_command(c),
                 parser::Command::SREProgram(seq) => Self::new_from_sre_sequence(seq),
                 parser::Command::BraceGroup(arr) => Self::new_from_command_lists(arr),
-                _ => unimplemented!(),
+                parser::Command::IfConstruct(condition, body) => Self::new_from_if(condition, body),
             });
         }
 

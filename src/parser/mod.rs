@@ -119,7 +119,7 @@ pub enum Command {
     /// A brace group is code enclosed in brackets.
     BraceGroup(Vec<CommandList>),
     /// An if construct. First is the condition, second is the body.
-    IfConstruct(Program, CommandList),
+    IfConstruct(Program, Program),
 }
 
 /// Parses the series of [`Token`s](./lex/enum.Token.html) to the AST ([`ParseNode`s](enum.ParseNode.html)).
@@ -265,7 +265,7 @@ impl<R: LineReader> Parser<R> {
         {
             return Some(Err(e));
         }
-        let body = match self.parse_command_list() {
+        let body = match self.parse_program() {
             None => {
                 return Some(Err(rparen
                     .unwrap()
