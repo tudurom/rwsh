@@ -120,6 +120,8 @@ pub enum Command {
     BraceGroup(Vec<CommandList>),
     /// An if construct. First is the condition, second is the body.
     IfConstruct(Program, Program),
+    /// An else construct. The tuple contains the body.
+    ElseConstruct(Program),
 }
 
 /// Parses the series of [`Token`s](./lex/enum.Token.html) to the AST ([`ParseNode`s](enum.ParseNode.html)).
@@ -155,11 +157,35 @@ impl<R: LineReader> Parser<R> {
         self.lexer.borrow_mut().next()
     }
 
-    fn parse_program(&mut self) -> Option<Result<Program, ParseError>> {
-        match self.parse_command_list() {
-            Some(Ok(cl)) => Some(Ok(Program(vec![cl]))),
-            Some(Err(e)) => Some(Err(e.clone())),
-            None => None,
+    fn parse_program(&mut self, absorb_newline: bool) -> Option<Result<Program, ParseError>> {
+        let mut v = Vec::new();
+        self.skip_space(true);
+        while let Some(p) = self.peek() {
+            if let Err(e) = p {
+                return Some(Err(e));
+            }
+            let kind = p.unwrap().kind;
+            match kind {
+                lex::TokenKind::Newline => {
+                    if absorb_newline {
+                        self.next_tok();
+                    }
+                    break;
+                }
+                lex::TokenKind::Word(_) | lex::TokenKind::LBrace => {}
+                _ => break,
+            }
+            match self.parse_command_list() {
+                None => break,
+                Some(Err(e)) => return Some(Err(e)),
+                Some(Ok(cl)) => v.push(cl),
+            }
+            self.skip_space(true);
+        }
+        if v.is_empty() {
+            None
+        } else {
+            Some(Ok(Program(v)))
         }
     }
 
@@ -191,6 +217,12 @@ impl<R: LineReader> Parser<R> {
                         kind: lex::TokenKind::Newline,
                         ..
                     })) => {}
+                    Some(Ok(lex::Token {
+                        kind: lex::TokenKind::Semicolon,
+                        ..
+                    })) => {
+                        self.next_tok();
+                    }
                     Some(Ok(
                         ref tok @ lex::Token {
                             kind: lex::TokenKind::Pipe,
@@ -238,6 +270,8 @@ impl<R: LineReader> Parser<R> {
 
     fn parse_if(&mut self) -> Option<Result<Command, ParseError>> {
         let if_tok = self.next_tok().unwrap().unwrap(); // if keyword
+        self.lexer.borrow_mut().ps2_enter("if".to_owned());
+
         self.skip_space(false);
         let lparen = self.next_tok(); // (
         if let Err(e) = check_condition_symbol(
@@ -249,7 +283,7 @@ impl<R: LineReader> Parser<R> {
         ) {
             return Some(Err(e));
         }
-        let prog = match self.parse_program() {
+        let prog = match self.parse_program(false) {
             None => {
                 return Some(Err(lparen
                     .unwrap()
@@ -265,7 +299,7 @@ impl<R: LineReader> Parser<R> {
         {
             return Some(Err(e));
         }
-        let body = match self.parse_program() {
+        let body = match self.parse_program(false) {
             None => {
                 return Some(Err(rparen
                     .unwrap()
@@ -273,9 +307,27 @@ impl<R: LineReader> Parser<R> {
                     .new_error("expected if body, got EOF".to_owned())))
             }
             Some(Err(e)) => return Some(Err(e)),
-            Some(Ok(cl)) => cl,
+            Some(Ok(b)) => b,
         };
+        self.lexer.borrow_mut().ps2_exit();
         Some(Ok(Command::IfConstruct(prog, body)))
+    }
+
+    fn parse_else(&mut self) -> Option<Result<Command, ParseError>> {
+        let else_tok = self.next_tok().unwrap().unwrap(); // else keyword
+        self.lexer.borrow_mut().ps2_enter("else".to_owned());
+
+        let body = match self.parse_program(false) {
+            None => {
+                return Some(Err(
+                    else_tok.new_error("expected else body, got EOF".to_owned())
+                ))
+            }
+            Some(Err(e)) => return Some(Err(e)),
+            Some(Ok(b)) => b,
+        };
+        self.lexer.borrow_mut().ps2_exit();
+        Some(Ok(Command::ElseConstruct(body)))
     }
 
     fn parse_command(&mut self) -> Option<Result<Command, ParseError>> {
@@ -338,6 +390,7 @@ impl<R: LineReader> Parser<R> {
                 if let RawWord::String(s, false) = w.borrow().deref() {
                     match s.as_ref() {
                         "if" => return self.parse_if(),
+                        "else" => return self.parse_else(),
                         _ => {}
                     }
                 }
@@ -346,10 +399,7 @@ impl<R: LineReader> Parser<R> {
             }
             None => None,
             Some(Err(e)) => Some(Err(e)),
-            Some(x) => {
-                eprintln!("{:#?}", x);
-                panic!()
-            }
+            Some(Ok(x)) => Some(Err(x.new_error(format!("unexpected token {:?}", x)))),
         }
     }
 
@@ -449,7 +499,7 @@ impl<R: LineReader> Iterator for Parser<R> {
         if self.error.is_some() {
             return None;
         }
-        self.parse_program()
+        self.parse_program(true)
     }
 }
 

@@ -30,9 +30,11 @@ This is going to be a UNIX shell based around [Structural Regular Expressions][s
     - [ ] Arrays / Lists
     - [ ] Maps
 - [ ] Control flow structures
-    - [ ] If
+    - [x] If-else
     - [ ] While
     - [ ] For
     - [ ] Switch
 - [ ] Functions
 - [ ] Builtins
+    - [x] `cd`
+    - [x] `exit`

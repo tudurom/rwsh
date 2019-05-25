@@ -47,6 +47,7 @@ impl SRESequence {
 
 impl TaskImpl for SRESequence {
     fn poll(&mut self, ctx: &mut Context) -> Result<TaskStatus, String> {
+        ctx.state.if_condition_ok = None;
         if !self.started {
             self.process_start(ctx)?;
             self.started = true;

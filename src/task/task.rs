@@ -85,8 +85,15 @@ impl Task {
 
     pub fn new_from_if(condition: parser::Program, body: parser::Program) -> Self {
         Task::new(Box::new(IfConstruct::new(
-                    Self::new_from_command_lists(condition.0),
-                    Self::new_from_command_lists(body.0))))
+            Self::new_from_command_lists(condition.0),
+            Self::new_from_command_lists(body.0),
+        )))
+    }
+
+    pub fn new_from_else(body: parser::Program) -> Self {
+        Task::new(Box::new(ElseConstruct::new(Self::new_from_command_lists(
+            body.0,
+        ))))
     }
 
     pub fn new_from_pipeline(p: parser::Pipeline) -> Self {
@@ -98,6 +105,7 @@ impl Task {
                 parser::Command::SREProgram(seq) => Self::new_from_sre_sequence(seq),
                 parser::Command::BraceGroup(arr) => Self::new_from_command_lists(arr),
                 parser::Command::IfConstruct(condition, body) => Self::new_from_if(condition, body),
+                parser::Command::ElseConstruct(body) => Self::new_from_else(body),
             });
         }
 

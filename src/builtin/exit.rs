@@ -1,7 +1,7 @@
-use crate::shell::State;
+use crate::shell::Context;
 use std::process;
 
-pub fn exit(_state: &mut State, args: Vec<&str>) -> i32 {
+pub fn exit(_ctx: &mut Context, args: Vec<&str>) -> i32 {
     if args.len() > 2 {
         eprintln!("exit: Usage:\nexit [code]");
         return 1;

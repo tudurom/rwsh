@@ -30,6 +30,7 @@ pub struct State {
     pub processes: Vec<Rc<RefCell<Process>>>,
     pub vars: HashMap<String, Var>,
     pub last_status: i32,
+    pub if_condition_ok: Option<bool>,
 }
 
 fn read_vars() -> HashMap<String, Var> {
@@ -47,6 +48,7 @@ impl State {
             last_status: 0,
             processes: Vec::new(),
             vars: read_vars(),
+            if_condition_ok: None,
         }
     }
 

@@ -1,4 +1,4 @@
-use crate::shell::State;
+use crate::shell::Context;
 
 mod cd;
 mod exit;
@@ -7,7 +7,7 @@ use cd::cd;
 use exit::exit;
 use r#let::{r#let, unset};
 
-type BuiltinFunc = fn(&mut State, Vec<&str>) -> i32;
+type BuiltinFunc = fn(&mut Context, Vec<&str>) -> i32;
 
 #[derive(Clone, Copy)]
 pub struct Builtin {

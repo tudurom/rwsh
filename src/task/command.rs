@@ -69,7 +69,7 @@ impl Command {
         assert!(!self.started);
         let b = crate::builtin::get_builtin(&self.args[0]).unwrap();
         Ok(TaskStatus::Success((b.func)(
-            &mut ctx.state,
+            ctx,
             self.args.iter().map(|s| &**s).collect::<Vec<&str>>(),
         )))
     }
@@ -84,6 +84,7 @@ impl Command {
 
 impl TaskImpl for Command {
     fn poll(&mut self, ctx: &mut Context) -> Result<TaskStatus, String> {
+        ctx.state.if_condition_ok = None;
         if !self.started {
             self.get_args(ctx);
             self.t = if builtin::get_builtin(&self.args[0]).is_some() {

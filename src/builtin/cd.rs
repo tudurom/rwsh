@@ -1,6 +1,6 @@
-use crate::shell::State;
+use crate::shell::Context;
 
-pub fn cd(_state: &mut State, args: Vec<&str>) -> i32 {
+pub fn cd(_ctx: &mut Context, args: Vec<&str>) -> i32 {
     let mut dir;
     let home = dirs::home_dir().unwrap();
     if let Some(arg) = args.get(1) {

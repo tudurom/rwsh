@@ -13,7 +13,6 @@ pub enum TokenKind {
     Pipe,
     /// A structural regular expression pipe (`|>`) and its SRE code
     Pizza(Command),
-    /// A newline.
     Newline,
     /// A sequence of concatenated words.
     ///
@@ -28,6 +27,7 @@ pub enum TokenKind {
     LParen,
     /// Right parenthesis
     RParen,
+    Semicolon,
 }
 
 impl TokenKind {
@@ -192,6 +192,9 @@ impl<R: LineReader> Iterator for Lexer<R> {
             } else if c == ')' {
                 self.input.next();
                 Some(Ok(tok!(TokenKind::RParen, 1, self.input)))
+            } else if c == ';' {
+                self.input.next();
+                Some(Ok(tok!(TokenKind::Semicolon, 1, self.input)))
             } else if c.is_whitespace() {
                 let len = skip_whitespace(&mut self.input, false);
                 Some(Ok(tok!(TokenKind::Space, len, self.input)))
@@ -222,6 +225,7 @@ fn is_special_char(c: char) -> bool {
         || c == '}'
         || c == '('
         || c == ')'
+        || c == ';'
 }
 
 fn is_clear_string_char(c: char) -> bool {

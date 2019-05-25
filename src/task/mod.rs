@@ -1,14 +1,14 @@
 mod command;
+mod if_construct;
 mod pipeline;
 mod sresequence;
 mod task;
 mod tasklist;
 mod word;
-mod if_construct;
 pub use command::Command;
+pub use if_construct::{ElseConstruct, IfConstruct};
 pub use pipeline::Pipeline;
 pub use sresequence::SRESequence;
 pub use task::*;
 pub use tasklist::TaskList;
 pub use word::Word;
-pub use if_construct::IfConstruct;
