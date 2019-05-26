@@ -160,7 +160,10 @@ impl<R: LineReader> Parser<R> {
     fn parse_program(&mut self, absorb_newline: bool) -> Option<Result<Program, ParseError>> {
         let mut v = Vec::new();
         self.skip_space(true);
+
+        let mut got_eof = true;
         while let Some(p) = self.peek() {
+            got_eof = false;
             if let Err(e) = p {
                 return Some(Err(e));
             }
@@ -170,6 +173,10 @@ impl<R: LineReader> Parser<R> {
                     if absorb_newline {
                         self.next_tok();
                     }
+                    break;
+                }
+                lex::TokenKind::Semicolon => {
+                    self.next_tok();
                     break;
                 }
                 lex::TokenKind::Word(_) | lex::TokenKind::LBrace => {}
@@ -182,7 +189,7 @@ impl<R: LineReader> Parser<R> {
             }
             self.skip_space(true);
         }
-        if v.is_empty() {
+        if got_eof && v.is_empty() {
             None
         } else {
             Some(Ok(Program(v)))
@@ -291,7 +298,15 @@ impl<R: LineReader> Parser<R> {
                     .new_error("expected if condition, got EOF".to_owned())))
             }
             Some(Err(e)) => return Some(Err(e)),
-            Some(Ok(p)) => p,
+            Some(Ok(p)) => {
+                if p.0.is_empty() {
+                    return Some(Err(lparen
+                        .unwrap()
+                        .unwrap()
+                        .new_error("expected if condition".to_owned())));
+                }
+                p
+            }
         };
         let rparen = self.next_tok(); // )
         if let Err(e) =

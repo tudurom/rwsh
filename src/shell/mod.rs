@@ -162,6 +162,9 @@ impl<R: LineReader> Shell<R> {
     pub fn run(&mut self) {
         for t in self.p.by_ref() {
             if let Ok(p) = t {
+                if p.0.is_empty() {
+                    continue;
+                }
                 match Self::run_program(p, &mut self.state) {
                     Ok(status) => self.state.exit = status.0,
                     Err(error) => eprintln!("{}", error),
