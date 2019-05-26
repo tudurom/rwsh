@@ -7,6 +7,7 @@ use crate::util::{BufReadChars, LineReader, ParseError};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
+    Nothing,
     /// One or more non-newline whitespace characters.
     Space,
     /// The pipe (`|`) character.
@@ -28,6 +29,9 @@ pub enum TokenKind {
     /// Right parenthesis
     RParen,
     Semicolon,
+    DoubleQuote,
+    SingleQuote,
+    Dollar,
 }
 
 impl TokenKind {
@@ -76,6 +80,17 @@ pub struct Lexer<R: LineReader> {
     peeked: Option<Option<Result<Token, ParseError>>>,
 }
 
+#[macro_export]
+macro_rules! tok {
+    ($kind:expr, $len:expr, $it:expr) => {
+        Token {
+            len: $len,
+            pos: $it.get_pos(),
+            kind: $kind,
+        }
+    };
+}
+
 impl<R: LineReader> Lexer<R> {
     /// Creates a new lexer based on a `char` iterator,
     /// usually a [`BufReadChars`](../../util/struct.BufReadChars.html).
@@ -102,17 +117,154 @@ impl<R: LineReader> Lexer<R> {
     pub fn ps2_exit(&mut self) {
         self.input.ps2_exit();
     }
-}
 
-#[macro_export]
-macro_rules! tok {
-    ($kind:expr, $len:expr, $it:expr) => {
-        Token {
-            len: $len,
-            pos: $it.get_pos(),
-            kind: $kind,
+    fn read_word(&mut self) -> Result<Token, ParseError> {
+        let c = *self.input.peek().unwrap();
+        if is_clear_string_char(c) {
+            let (w, len) = self.read_word_string(WordStringReadMode::Unqoted)?;
+            Ok(tok!(TokenKind::Word(w), len, self.input))
+        } else {
+            Err(self
+                .input
+                .new_error(format!("unexpected character '{}'", c)))
         }
-    };
+        /*
+        match it.peek().unwrap() {
+            '\'' => read_word_string(it, WordStringReadMode::SingleQuoted),
+            '"' => read_double_quoted(it),
+            '$' => {
+                let p = read_word_parameter(it)?;
+                Ok(tok!(
+                    TokenKind::Word(RawWord::Parameter(p.0).into()),
+                    p.1,
+                    it
+                ))
+            }
+            &c if is_clear_string_char(c) => read_word_string(it, WordStringReadMode::Unqoted),
+            &c => Err(it.new_error(format!("unexpected character '{}'", c))),
+        }
+        */
+        
+    }
+
+    pub fn read_word_string(
+        &mut self,
+        mode: WordStringReadMode,
+    ) -> Result<(Word, usize), ParseError> {
+        let mut s = String::new();
+        let mut escaping = false;
+        if let WordStringReadMode::SingleQuoted = mode {
+            //self.input.next(); // skip quote
+        }
+        while let Some(&c) = self.input.peek() {
+            if escaping {
+                s.push(escape(c));
+                escaping = false;
+            } else if c == '\\' {
+                escaping = true;
+            } else {
+                match mode {
+                    WordStringReadMode::Unqoted => {
+                        if !is_clear_string_char(c) {
+                            break;
+                        }
+                    }
+                    WordStringReadMode::SingleQuoted => {
+                        if c == '\'' {
+                            self.input.next();
+                            break;
+                        }
+                    }
+                    WordStringReadMode::DoubleQuoted => {
+                        if c == '$' || c == '"' {
+                            break;
+                        }
+                    }
+                    WordStringReadMode::Parameter => {
+                        if !is_parameter_char(c) {
+                            break;
+                        }
+                    }
+                }
+                s.push(c);
+            }
+            self.input.next();
+        }
+
+        if escaping {
+            Err(self
+                .input
+                .new_error("expected character, got EOF".to_owned()))
+        } else {
+            let single_quote = if let WordStringReadMode::SingleQuoted = mode {
+                true
+            } else {
+                false
+            };
+            let len = s.len();
+            Ok((RawWord::String(s, single_quote).into(), len))
+        }
+    }
+
+    pub fn read_double_quoted(&mut self) -> Result<Word, ParseError> {
+        // " is already skipped
+
+        let mut v = Vec::new();
+        let mut closed = false;
+        let mut len = 2;
+        while let Some(&c) = self.input.peek() {
+            if c == '"' {
+                closed = true;
+                self.input.next();
+                break;
+            }
+            let w = if c == '$' {
+                self.input.next();
+                let (x, l) = self.read_word_parameter()?;
+                len += l;
+                RawWord::Parameter(x).into()
+            } else {
+                let (w, w_len) = self.read_word_string(WordStringReadMode::DoubleQuoted)?;
+                len += w_len;
+                w
+            };
+            v.push(w);
+        }
+        if !closed {
+            Err(self.input.new_error("expected '\"', got EOF".to_owned()))
+        } else {
+            Ok(RawWord::List(v, true).into())
+        }
+    }
+
+    pub fn read_word_parameter(&mut self) -> Result<(WordParameter, usize), ParseError> {
+        // $ is already skipped
+
+        if let Some('{') = self.input.peek() {
+            unimplemented!()
+        }
+        let (w, len) = self.read_word_string(WordStringReadMode::Parameter)?;
+        if len == 0 {
+            Ok((
+                WordParameter {
+                    name: "".to_owned(),
+                },
+                1,
+            ))
+        } else {
+            use std::ops::Deref;
+            if let RawWord::String(name, _) = w.borrow().deref() {
+                Ok((
+                    WordParameter {
+                        name: name.to_string(),
+                    },
+                    len + 1,
+                ))
+            } else {
+                panic!()
+            }
+        }
+    }
 }
 
 impl<R: LineReader> Iterator for Lexer<R> {
@@ -195,11 +347,20 @@ impl<R: LineReader> Iterator for Lexer<R> {
             } else if c == ';' {
                 self.input.next();
                 Some(Ok(tok!(TokenKind::Semicolon, 1, self.input)))
+            } else if c == '\'' {
+                self.input.next();
+                Some(Ok(tok!(TokenKind::SingleQuote, 1, self.input)))
+            } else if c == '"' {
+                self.input.next();
+                Some(Ok(tok!(TokenKind::DoubleQuote, 1, self.input)))
+            } else if c == '$' {
+                self.input.next();
+                Some(Ok(tok!(TokenKind::Dollar, 1, self.input)))
             } else if c.is_whitespace() {
                 let len = skip_whitespace(&mut self.input, false);
                 Some(Ok(tok!(TokenKind::Space, len, self.input)))
             } else {
-                match read_word(&mut self.input) {
+                match self.read_word() {
                     Ok(t) => Some(Ok(t)),
                     Err(e) => {
                         self.errored = true;
@@ -239,159 +400,11 @@ fn is_parameter_char(c: char) -> bool {
         || ((is_clear_string_char(c) && !is_special_char(c)) && !c.is_ascii_punctuation())
 }
 
-enum WordStringReadMode {
+pub enum WordStringReadMode {
     Unqoted,
     SingleQuoted,
     DoubleQuoted,
     Parameter,
-}
-
-fn read_word<R: LineReader>(it: &mut BufReadChars<R>) -> Result<Token, ParseError> {
-    match it.peek().unwrap() {
-        '\'' => read_word_string(it, WordStringReadMode::SingleQuoted),
-        '"' => read_double_quoted(it),
-        '$' => {
-            let p = read_word_parameter(it)?;
-            Ok(tok!(
-                TokenKind::Word(RawWord::Parameter(p.0).into()),
-                p.1,
-                it
-            ))
-        }
-        &c if is_clear_string_char(c) => read_word_string(it, WordStringReadMode::Unqoted),
-        &c => Err(it.new_error(format!("unexpected character '{}'", c))),
-    }
-}
-
-fn read_word_string<R: LineReader>(
-    it: &mut BufReadChars<R>,
-    mode: WordStringReadMode,
-) -> Result<Token, ParseError> {
-    let mut s = String::new();
-    let mut escaping = false;
-    if let WordStringReadMode::SingleQuoted = mode {
-        it.next(); // skip quote
-    }
-    while let Some(&c) = it.peek() {
-        if escaping {
-            s.push(escape(c));
-            escaping = false;
-        } else if c == '\\' {
-            escaping = true;
-        } else {
-            match mode {
-                WordStringReadMode::Unqoted => {
-                    if !is_clear_string_char(c) {
-                        break;
-                    }
-                }
-                WordStringReadMode::SingleQuoted => {
-                    if c == '\'' {
-                        it.next();
-                        break;
-                    }
-                }
-                WordStringReadMode::DoubleQuoted => {
-                    if c == '$' || c == '"' {
-                        break;
-                    }
-                }
-                WordStringReadMode::Parameter => {
-                    if !is_parameter_char(c) {
-                        break;
-                    }
-                }
-            }
-            s.push(c);
-        }
-        it.next();
-    }
-
-    if escaping {
-        Err(it.new_error("expected character, got EOF".to_owned()))
-    } else {
-        let single_quote = if let WordStringReadMode::SingleQuoted = mode {
-            true
-        } else {
-            false
-        };
-        Ok(tok!(
-            TokenKind::Word(RawWord::String(s, single_quote).into()),
-            s.len(),
-            it
-        ))
-    }
-}
-
-fn read_double_quoted<R: LineReader>(it: &mut BufReadChars<R>) -> Result<Token, ParseError> {
-    it.next(); // skip "
-    let mut v = Vec::new();
-    let mut closed = false;
-    let mut len = 2;
-    while let Some(&c) = it.peek() {
-        if c == '"' {
-            closed = true;
-            it.next();
-            break;
-        }
-        let w = if c == '$' {
-            let (x, l) = read_word_parameter(it)?;
-            len += l;
-            RawWord::Parameter(x).into()
-        } else {
-            let w = read_word_string(it, WordStringReadMode::DoubleQuoted)?;
-            len += w.len;
-            if let TokenKind::Word(w) = w.kind {
-                w
-            } else {
-                panic!()
-            }
-        };
-        v.push(w);
-    }
-    if !closed {
-        Err(it.new_error("expected '\"', got EOF".to_owned()))
-    } else {
-        Ok(tok!(
-            TokenKind::Word(RawWord::List(v, true).into()),
-            len,
-            it
-        ))
-    }
-}
-
-fn read_word_parameter<R: LineReader>(
-    it: &mut BufReadChars<R>,
-) -> Result<(WordParameter, usize), ParseError> {
-    it.next(); // skip $
-    if let Some('{') = it.peek() {
-        unimplemented!()
-    }
-    let tok = read_word_string(it, WordStringReadMode::Parameter)?;
-    if tok.len == 0 {
-        Ok((
-            WordParameter {
-                name: "".to_owned(),
-            },
-            1,
-        ))
-    } else {
-        use std::ops::Deref;
-        if let TokenKind::Word(w) = tok.kind {
-            if let RawWord::String(name, _) = w.borrow().deref() {
-                Ok((
-                    WordParameter {
-                        name: name.to_string(),
-                    },
-                    tok.len + 1,
-                ))
-            } else {
-                panic!()
-            }
-        } else {
-            panic!()
-        }
-    }
 }
 
 #[cfg(test)]
@@ -417,13 +430,12 @@ mod tests {
         let s = "hell_o nice \\-meme😀 test";
         let _result = ["hell_o", "nice", "-meme😀", "test"];
         let mut result = _result.iter().peekable();
-        let mut buf = new_dummy_buf(s.lines());
+        let mut lex = super::Lexer::new(new_dummy_buf(s.lines()));
         loop {
-            let x = super::read_word_string(&mut buf, super::WordStringReadMode::Unqoted);
-            if x.is_err() {
-                break;
-            }
-            let x = if let super::RawWord::String(s, q) = x.unwrap().kind.word().borrow().deref() {
+            let x = lex
+                .read_word_string(super::WordStringReadMode::Unqoted)
+                .unwrap();
+            let x = if let super::RawWord::String(s, q) = x.0.borrow().deref() {
                 assert_eq!(*q, false);
                 s.clone()
             } else {
@@ -436,7 +448,7 @@ mod tests {
                 break;
             }
             assert_eq!(x, *(correct.unwrap()));
-            buf.next(); // skip space
+            lex.next(); // skip space
         }
         assert_eq!(result.peek(), None);
     }
@@ -446,13 +458,13 @@ mod tests {
         let s = "'hell_o' 'nice' '\\-meme😀' 'test'";
         let _result = ["hell_o", "nice", "-meme😀", "test"];
         let mut result = _result.iter().peekable();
-        let mut buf = new_dummy_buf(s.lines());
+        let mut lex = super::Lexer::new(new_dummy_buf(s.lines()));
         loop {
-            let x = super::read_word_string(&mut buf, super::WordStringReadMode::SingleQuoted);
-            if x.is_err() {
-                break;
-            }
-            let x = if let super::RawWord::String(s, q) = x.unwrap().kind.word().borrow().deref() {
+            lex.next(); // skip quote
+            let x = lex
+                .read_word_string(super::WordStringReadMode::SingleQuoted)
+                .unwrap();
+            let x = if let super::RawWord::String(s, q) = x.0.borrow().deref() {
                 assert_eq!(*q, true);
                 s.clone()
             } else {
@@ -465,16 +477,17 @@ mod tests {
                 break;
             }
             assert_eq!(x, *(correct.unwrap()));
-            buf.next(); // skip space
+            lex.next(); // skip space
         }
         assert_eq!(result.peek(), None);
     }
 
     #[test]
     fn read_parameter_word() {
-        let mut buf = new_dummy_buf("$PARAM".lines());
+        let mut lex = super::Lexer::new(new_dummy_buf("$PARAM".lines()));
+        lex.next();
         assert_eq!(
-            super::read_word_parameter(&mut buf).unwrap(),
+            lex.read_word_parameter().unwrap(),
             (
                 crate::parser::WordParameter {
                     name: "PARAM".to_owned()
@@ -482,38 +495,6 @@ mod tests {
                 6 // the length
             )
         );
-    }
-
-    #[test]
-    fn read_word() {
-        use crate::parser::{RawWord, WordParameter};
-        use std::cell::RefCell;
-        use std::rc::Rc;
-        let mut buf = new_dummy_buf("\"Hello, my name is $NAME!\"".lines());
-        let r = super::read_word(&mut buf).unwrap().kind.word();
-        // i'm not proud of this
-        assert_eq!(
-            RawWord::List(
-                vec![
-                    Rc::new(RefCell::new(RawWord::String(
-                        "Hello, my name is ".to_owned(),
-                        false
-                    ))),
-                    Rc::new(RefCell::new(RawWord::Parameter(WordParameter {
-                        name: "NAME".to_owned()
-                    }))),
-                    Rc::new(RefCell::new(RawWord::String("!".to_owned(), false)))
-                ],
-                true
-            ),
-            r
-        );
-    }
-
-    #[test]
-    fn read_word_error() {
-        let mut buf = new_dummy_buf("\"not finished".lines());
-        assert!(super::read_word(&mut buf).is_err());
     }
 
     /*

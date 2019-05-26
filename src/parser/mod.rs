@@ -76,6 +76,9 @@ pub enum RawWord {
 
     /// An unqoted or double-quoted list of words.
     List(Vec<Word>, bool),
+
+    /// A command substitution
+    Command(Program),
 }
 
 impl Into<Word> for RawWord {
@@ -122,6 +125,18 @@ pub enum Command {
     IfConstruct(Program, Program),
     /// An else construct. The tuple contains the body.
     ElseConstruct(Program),
+}
+
+fn can_start_word(kind: &lex::TokenKind) -> bool {
+    if let lex::TokenKind::Word(_)
+    | lex::TokenKind::SingleQuote
+    | lex::TokenKind::DoubleQuote
+    | lex::TokenKind::Dollar = kind
+    {
+        true
+    } else {
+        false
+    }
 }
 
 /// Parses the series of [`Token`s](./lex/enum.Token.html) to the AST ([`ParseNode`s](enum.ParseNode.html)).
@@ -428,16 +443,15 @@ impl<R: LineReader> Parser<R> {
                 while let Some(r) = self.peek() {
                     match r {
                         Ok(tok) => match tok {
-                            lex::Token {
-                                kind: lex::TokenKind::Word(_),
-                                ..
-                            } => match self.parse_word_list() {
-                                Some(Ok(wl)) => {
-                                    v.push(wl);
+                            lex::Token { ref kind, .. } if can_start_word(kind) => {
+                                match self.parse_word_list() {
+                                    Some(Ok(wl)) => {
+                                        v.push(wl);
+                                    }
+                                    Some(Err(e)) => return Some(Err(e)),
+                                    None => panic!("no WordString"),
                                 }
-                                Some(Err(e)) => return Some(Err(e)),
-                                None => panic!("no WordString"),
-                            },
+                            }
                             lex::Token {
                                 kind: lex::TokenKind::Space,
                                 ..
@@ -486,16 +500,39 @@ impl<R: LineReader> Parser<R> {
         }
         len
     }
+
     fn parse_word_list(&mut self) -> Option<Result<Word, ParseError>> {
         self.skip_space(false);
         let mut v = Vec::new();
-        while let Some(Ok(lex::Token {
-            kind: lex::TokenKind::Word(word),
-            ..
-        })) = self.peek()
-        {
-            v.push(word);
-            self.next_tok();
+        while let Some(Ok(lex::Token { kind, .. })) = self.peek() {
+            match kind {
+                lex::TokenKind::Word(word) => {
+                    v.push(word);
+                    self.next_tok();
+                }
+                lex::TokenKind::SingleQuote => {
+                    let word = match self.parse_word_single_quoted() {
+                        Ok(w) => w,
+                        Err(e) => return Some(Err(e)),
+                    };
+                    v.push(word)
+                }
+                lex::TokenKind::DoubleQuote => {
+                    let word = match self.parse_word_double_quoted() {
+                        Ok(w) => w,
+                        Err(e) => return Some(Err(e)),
+                    };
+                    v.push(word)
+                }
+                lex::TokenKind::Dollar => {
+                    let word = match self.parse_word_parameter() {
+                        Ok(w) => w,
+                        Err(e) => return Some(Err(e)),
+                    };
+                    v.push(word);
+                }
+                _ => break,
+            }
         }
         if let Some(Err(e)) = self.peek() {
             Some(Err(e.clone()))
@@ -504,6 +541,26 @@ impl<R: LineReader> Parser<R> {
         } else {
             Some(Ok(RawWord::List(v, false).into()))
         }
+    }
+
+    fn parse_word_single_quoted(&mut self) -> Result<Word, ParseError> {
+        self.next_tok();
+        Ok(self
+            .lexer
+            .borrow_mut()
+            .read_word_string(lex::WordStringReadMode::SingleQuoted)?
+            .0)
+    }
+
+    fn parse_word_double_quoted(&mut self) -> Result<Word, ParseError> {
+        self.next_tok();
+        self.lexer.borrow_mut().read_double_quoted()
+    }
+
+    fn parse_word_parameter(&mut self) -> Result<Word, ParseError> {
+        self.next_tok();
+        let param = self.lexer.borrow_mut().read_word_parameter()?.0;
+        Ok(RawWord::Parameter(param).into())
     }
 }
 
@@ -594,5 +651,42 @@ pub mod tests {
         let p = super::Parser::new(new_dummy_buf("dmesg |> 2,3p\necho 'All ok'\n".lines()));
         let progs = p.collect::<Vec<_>>();
         assert_eq!(progs.len(), 2);
+    }
+
+    #[test]
+    fn read_word() {
+        use crate::parser::{RawWord, WordParameter};
+        use std::cell::RefCell;
+        use std::rc::Rc;
+        let mut p = super::Parser::new(new_dummy_buf("\"Hello, my name is $NAME!\"".lines()));
+        let r = p.parse_word_list().unwrap().unwrap();
+        // i'm not proud of this
+        use std::ops::Deref;
+        assert_eq!(
+            &RawWord::List(
+                vec![RawWord::List(
+                    vec![
+                        Rc::new(RefCell::new(RawWord::String(
+                            "Hello, my name is ".to_owned(),
+                            false
+                        ))),
+                        Rc::new(RefCell::new(RawWord::Parameter(WordParameter {
+                            name: "NAME".to_owned()
+                        }))),
+                        Rc::new(RefCell::new(RawWord::String("!".to_owned(), false)))
+                    ],
+                    true
+                )
+                .into()],
+                false
+            ),
+            r.borrow().deref()
+        );
+    }
+
+    #[test]
+    fn read_word_error() {
+        let mut p = super::Parser::new(new_dummy_buf("\"not finished".lines()));
+        assert!(p.parse_word_list().unwrap().is_err());
     }
 }
