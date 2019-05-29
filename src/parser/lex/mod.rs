@@ -293,6 +293,7 @@ pub fn is_parameter_char(c: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::Token;
+    use crate::util::ParseError;
     use crate::tests::common::new_dummy_buf;
 
     impl PartialEq<Token> for Token {
@@ -330,7 +331,6 @@ mod tests {
         assert_eq!(result.peek(), None);
     }
 
-    /*
     #[test]
     fn lex() {
         use crate::parser::sre::{
@@ -338,7 +338,7 @@ mod tests {
             Command,
         };
         let s =
-            "echo this\\ is\\ a test\". ignore \"'this 'please | cat\nmeow |> a/pizza/ | lolcat";
+            "test | {cat\nmeow}())} |> a/pizza/ | lolcat";
         let buf = new_dummy_buf(s.lines());
         macro_rules! tok {
             ($kind:expr) => {
@@ -350,21 +350,21 @@ mod tests {
             };
         }
 
+        use super::TokenKind::*;
         let ok: Vec<Result<Token, ParseError>> = vec![
-            Ok(tok!(WordString('\u{0}', "echo".to_owned()))),
-            Ok(tok!(Space)),
-            Ok(tok!(WordString('\u{0}', "this is a".to_owned()))),
-            Ok(tok!(Space)),
-            Ok(tok!(WordString('\u{0}', "test".to_owned()))),
-            Ok(tok!(WordString('\"', ". ignore ".to_owned()))),
-            Ok(tok!(WordString('\'', "this ".to_owned()))),
-            Ok(tok!(WordString('\u{0}', "please".to_owned()))),
+            Ok(tok!(Word(super::RawWord::String("test".to_owned(), false).into()))),
             Ok(tok!(Space)),
             Ok(tok!(Pipe)),
             Ok(tok!(Space)),
-            Ok(tok!(WordString('\u{0}', "cat".to_owned()))),
+            Ok(tok!(LBrace)),
+            Ok(tok!(Word(super::RawWord::String("cat".to_owned(), false).into()))),
             Ok(tok!(Newline)),
-            Ok(tok!(WordString('\u{0}', "meow".to_owned()))),
+            Ok(tok!(Word(super::RawWord::String("meow".to_owned(), false).into()))),
+            Ok(tok!(RBrace)),
+            Ok(tok!(LParen)),
+            Ok(tok!(RParen)),
+            Ok(tok!(RParen)),
+            Ok(tok!(RBrace)),
             Ok(tok!(Space)),
             Ok(tok!(Pizza(Command::new(
                 ComposedAddress::new(SimpleAddress::Dot, None, None),
@@ -375,7 +375,7 @@ mod tests {
             Ok(tok!(Space)),
             Ok(tok!(Pipe)),
             Ok(tok!(Space)),
-            Ok(tok!(WordString('\u{0}', "lolcat".to_owned()))),
+            Ok(tok!(Word(super::RawWord::String("lolcat".to_owned(), false).into()))),
             Ok(tok!(Newline)),
         ];
         let l = super::Lexer::new(buf);
@@ -396,13 +396,10 @@ mod tests {
             };
         }
         let ok: Vec<Result<super::Token, ParseError>> = vec![
-            Ok(tok!(WordString(
-                '\u{0}',
-                "long_unimplemented_stuff".to_owned()
-            ))),
-            Ok(tok!(Space)),
+            Ok(tok!(super::TokenKind::Word(super::RawWord::String("long_unimplemented_stuff".to_owned(), false).into()))),
+            Ok(tok!(super::TokenKind::Space)),
             Err(ParseError {
-                message: "unexpected character &".to_owned(),
+                message: "unexpected character '&'".to_owned(),
                 line: 0,
                 col: 0,
             }),
@@ -418,5 +415,4 @@ mod tests {
         }
         assert_eq!(result, ok);
     }
-    */
 }
