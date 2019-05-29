@@ -37,8 +37,17 @@ impl Task {
                 ctx.state.last_status = code;
                 return Ok(code);
             }
-            let stat = wait::waitpid(None, None)?;
-            ctx.state.update_process(stat.pid().unwrap(), stat);
+            match wait::waitpid(None, None) {
+                Err(e) => {
+                    if let Some(nix::errno::Errno::ECHILD) = e.as_errno() {
+                        ctx.state.last_status = 0;
+                        return Ok(0);
+                    } else {
+                        return Err(Box::new(e));
+                    }
+                },
+                Ok(stat) => ctx.state.update_process(stat.pid().unwrap(), stat),
+            }
         }
     }
 
