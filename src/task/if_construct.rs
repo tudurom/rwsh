@@ -49,7 +49,7 @@ impl TaskImpl for ElseConstruct {
         if ctx.state.if_condition_ok.is_none() && !self.polled {
             return Err("cannot use else without an if before it".to_owned());
         }
-        if self.polled || ctx.state.if_condition_ok.unwrap() == false {
+        if self.polled || !ctx.state.if_condition_ok.unwrap() {
             self.polled = true;
             self.body.poll(ctx)
         } else {

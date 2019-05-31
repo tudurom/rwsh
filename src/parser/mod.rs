@@ -37,7 +37,7 @@ fn check_condition_symbol(
     kw_tok: Token,
 ) -> Result<(), ParseError> {
     match x {
-        Some(Err(e)) => return Err(e),
+        Some(Err(e)) => Err(e),
         Some(Ok(ref tok @ Token { .. })) if tok.kind != kind => Err(tok.new_error(format!(
             "expected '{}' in {} condition, got {:?}",
             ch, construct, tok.kind
@@ -177,7 +177,7 @@ impl<R: LineReader> Parser<R> {
     }
 
     fn peek_char(&self) -> Option<char> {
-        self.lexer.borrow_mut().input.peek().map(|c| *c)
+        self.lexer.borrow_mut().input.peek().cloned()
     }
 
     fn next_tok(&self) -> Option<Result<Token, ParseError>> {

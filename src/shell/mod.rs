@@ -83,7 +83,7 @@ impl State {
     pub fn set_var(&mut self, key: String, value: Var) {
         match &value {
             Var::String(s) => {
-                if s.len() == 0 && self.vars.contains_key(&key) {
+                if s.is_empty() && self.vars.contains_key(&key) {
                     self.vars.remove(&key);
                 } else {
                     self.vars.insert(key, value);

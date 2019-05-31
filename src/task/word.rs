@@ -93,7 +93,7 @@ fn get_pw_dir(user: &str) -> Result<PathBuf, String> {
 }
 
 fn expand_tilde(s: &mut String) -> Result<(), String> {
-    if s.len() == 0 || s.as_bytes()[0] != b'~' {
+    if s.is_empty() || s.as_bytes()[0] != b'~' {
         return Ok(());
     }
     let mut buf = PathBuf::new();
@@ -120,7 +120,7 @@ impl TaskImpl for Word {
     fn poll(&mut self, ctx: &mut Context) -> Result<TaskStatus, String> {
         let mut program = None;
         let mut to_replace = None;
-        use std::ops::{Deref, DerefMut};
+        use std::ops::DerefMut;
         if let parser::RawWord::String(ref mut s, _) = self.word.borrow_mut().deref_mut() {
             if self.expand_tilde {
                 expand_tilde(s)?;

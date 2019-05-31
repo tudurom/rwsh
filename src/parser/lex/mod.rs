@@ -77,6 +77,7 @@ pub struct Lexer<R: LineReader> {
     pipe_follows: bool,
     errored: bool,
 
+    #[allow(clippy::option_option)]
     peeked: Option<Option<Result<Token, ParseError>>>,
 }
 

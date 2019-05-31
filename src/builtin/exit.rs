@@ -12,7 +12,7 @@ pub fn exit(_ctx: &mut Context, args: Vec<&str>) -> i32 {
             Ok(i) => process::exit(i),
             Err(_) => {
                 eprintln!("exit: exit code not an integer");
-                return 1;
+                1
             }
         }
     } else {
