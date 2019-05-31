@@ -5,6 +5,7 @@ pub mod sre;
 
 use self::lex::{Lexer, Token};
 use crate::util::{BufReadChars, LineReader, ParseError};
+use result::ResultOptionExt;
 use sre::Command as SRECommand;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -656,35 +657,36 @@ impl<R: LineReader> Parser<R> {
         let peek = self.peek_char();
         match peek {
             Some('{') => unimplemented!(),
-            Some('(') => unimplemented!(),
-            _ => Ok(self.parse_word_parameter()?.0),
+            Some('(') => self.parse_word_command(),
+            _ => self.parse_word_parameter(),
         }
     }
 
-    pub fn parse_word_parameter(&mut self) -> Result<(Word, usize), ParseError> {
+    pub fn parse_word_parameter(&mut self) -> Result<Word, ParseError> {
         let (w, len) = self.parse_word_string(WordStringReadMode::Parameter)?;
         if len == 0 {
-            Ok((
-                RawWord::Parameter(WordParameter {
-                    name: "".to_owned(),
-                })
-                .into(),
-                1,
-            ))
+            Ok(RawWord::Parameter(WordParameter {
+                name: "".to_owned(),
+            })
+            .into())
         } else {
             use std::ops::Deref;
             if let RawWord::String(name, _) = w.borrow().deref() {
-                Ok((
-                    RawWord::Parameter(WordParameter {
-                        name: name.to_string(),
-                    })
-                    .into(),
-                    len + 1,
-                ))
+                Ok(RawWord::Parameter(WordParameter {
+                    name: name.to_string(),
+                })
+                .into())
             } else {
                 panic!()
             }
         }
+    }
+
+    pub fn parse_word_command(&mut self) -> Result<Word, ParseError> {
+        self.next_tok(); // (
+        let prog = self.parse_program(false).invert()?.unwrap();
+        self.next_tok(); // )
+        Ok(RawWord::Command(prog).into())
     }
 }
 
@@ -844,13 +846,10 @@ pub mod tests {
         p.next();
         assert_eq!(
             p.parse_word_parameter().unwrap(),
-            (
-                super::RawWord::Parameter(super::WordParameter {
-                    name: "PARAM".to_owned()
-                })
-                .into(),
-                6 // the length
-            )
+            super::RawWord::Parameter(super::WordParameter {
+                name: "PARAM".to_owned()
+            })
+            .into(),
         );
     }
 

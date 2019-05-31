@@ -293,8 +293,8 @@ pub fn is_parameter_char(c: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::Token;
-    use crate::util::ParseError;
     use crate::tests::common::new_dummy_buf;
+    use crate::util::ParseError;
 
     impl PartialEq<Token> for Token {
         fn eq(&self, other: &Token) -> bool {
@@ -337,8 +337,7 @@ mod tests {
             address::{ComposedAddress, SimpleAddress},
             Command,
         };
-        let s =
-            "test | {cat\nmeow}())} |> a/pizza/ | lolcat";
+        let s = "test | {cat\nmeow}())} |> a/pizza/ | lolcat";
         let buf = new_dummy_buf(s.lines());
         macro_rules! tok {
             ($kind:expr) => {
@@ -352,14 +351,20 @@ mod tests {
 
         use super::TokenKind::*;
         let ok: Vec<Result<Token, ParseError>> = vec![
-            Ok(tok!(Word(super::RawWord::String("test".to_owned(), false).into()))),
+            Ok(tok!(Word(
+                super::RawWord::String("test".to_owned(), false).into()
+            ))),
             Ok(tok!(Space)),
             Ok(tok!(Pipe)),
             Ok(tok!(Space)),
             Ok(tok!(LBrace)),
-            Ok(tok!(Word(super::RawWord::String("cat".to_owned(), false).into()))),
+            Ok(tok!(Word(
+                super::RawWord::String("cat".to_owned(), false).into()
+            ))),
             Ok(tok!(Newline)),
-            Ok(tok!(Word(super::RawWord::String("meow".to_owned(), false).into()))),
+            Ok(tok!(Word(
+                super::RawWord::String("meow".to_owned(), false).into()
+            ))),
             Ok(tok!(RBrace)),
             Ok(tok!(LParen)),
             Ok(tok!(RParen)),
@@ -375,7 +380,9 @@ mod tests {
             Ok(tok!(Space)),
             Ok(tok!(Pipe)),
             Ok(tok!(Space)),
-            Ok(tok!(Word(super::RawWord::String("lolcat".to_owned(), false).into()))),
+            Ok(tok!(Word(
+                super::RawWord::String("lolcat".to_owned(), false).into()
+            ))),
             Ok(tok!(Newline)),
         ];
         let l = super::Lexer::new(buf);
@@ -396,7 +403,9 @@ mod tests {
             };
         }
         let ok: Vec<Result<super::Token, ParseError>> = vec![
-            Ok(tok!(super::TokenKind::Word(super::RawWord::String("long_unimplemented_stuff".to_owned(), false).into()))),
+            Ok(tok!(super::TokenKind::Word(
+                super::RawWord::String("long_unimplemented_stuff".to_owned(), false).into()
+            ))),
             Ok(tok!(super::TokenKind::Space)),
             Err(ParseError {
                 message: "unexpected character '&'".to_owned(),

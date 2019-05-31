@@ -65,7 +65,7 @@ impl State {
     pub fn update_process(&mut self, pid: Pid, stat: WaitStatus) {
         let p = self.processes.iter().find(|p| p.borrow().pid == pid);
         if p.is_none() {
-            eprintln!("rwsh: warning: tried to update lot process {}", pid);
+            eprintln!("rwsh: warning: tried to update lost process {}", pid);
             return; // poor process got lost
         }
         let p = p.unwrap();
@@ -165,7 +165,7 @@ impl<R: LineReader> Shell<R> {
                 if p.0.is_empty() {
                     continue;
                 }
-                match Self::run_program(p, &mut self.state) {
+                match run_program(p, &mut self.state) {
                     Ok(status) => self.state.exit = status.0,
                     Err(error) => eprintln!("{}", error),
                 }
@@ -176,17 +176,17 @@ impl<R: LineReader> Shell<R> {
         }
         std::process::exit(self.state.exit);
     }
-
-    fn run_program(p: Program, state: &mut State) -> Result<(i32, Context), Box<Error>> {
-        let mut task = Task::new_from_command_lists(p.0);
-        let mut ctx = Context { state };
-        let r = task.run(&mut ctx)?;
-        Ok((r, ctx))
-    }
 }
 
 impl Default for Shell<InteractiveLineReader> {
     fn default() -> Self {
         Self::new_interactive()
     }
+}
+
+pub fn run_program(p: Program, state: &mut State) -> Result<(i32, Context), Box<Error>> {
+    let mut task = Task::new_from_command_lists(p.0);
+    let mut ctx = Context { state };
+    let r = task.run(&mut ctx)?;
+    Ok((r, ctx))
 }

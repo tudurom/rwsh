@@ -1,17 +1,72 @@
 use super::*;
 use crate::parser;
-use crate::shell::Context;
+use crate::shell::{self, Context, Process};
+use nix::unistd;
+use std::cell::RefCell;
 use std::ffi::{CStr, CString};
+use std::fs::File;
+use std::io::stdout;
+use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::path::{Component, Path, PathBuf};
+use std::process::exit;
+use std::rc::Rc;
 
 pub struct Word {
     word: parser::Word,
     expand_tilde: bool,
+
+    started: bool,
+    fd: RawFd,
+    process: Option<Rc<RefCell<Process>>>,
 }
 
 impl Word {
     pub fn new(word: parser::Word, expand_tilde: bool) -> Self {
-        Word { word, expand_tilde }
+        Word {
+            word,
+            expand_tilde,
+            started: false,
+            fd: -1,
+            process: None,
+        }
+    }
+
+    fn start_command(&mut self, prog: parser::Program, ctx: &mut Context) -> Result<(), String> {
+        let (in_pipe, out_pipe) =
+            unistd::pipe().map_err(|e| format!("couldn't pipe command for substitution: {}", e))?;
+
+        let fork_result = match unistd::fork() {
+            Ok(x) => x,
+            Err(e) => {
+                unistd::close(in_pipe).unwrap();
+                unistd::close(out_pipe).unwrap();
+                return Err(format!("couldn't fork: {}", e));
+            }
+        };
+        match fork_result {
+            unistd::ForkResult::Child => {
+                unistd::close(in_pipe).unwrap();
+                unistd::dup2(out_pipe, stdout().as_raw_fd()).unwrap();
+                unistd::close(out_pipe).unwrap();
+
+                exit(
+                    shell::run_program(prog, ctx.state)
+                        .map_err(|e| {
+                            format!(
+                                "error while executing command for command substitution: {}",
+                                e
+                            )
+                        })?
+                        .0,
+                );
+            }
+            unistd::ForkResult::Parent { child: pid, .. } => {
+                unistd::close(out_pipe).unwrap();
+                self.process = Some(ctx.state.new_process(pid));
+                self.fd = in_pipe;
+                Ok(())
+            }
+        }
     }
 }
 
@@ -63,15 +118,16 @@ fn expand_tilde(s: &mut String) -> Result<(), String> {
 
 impl TaskImpl for Word {
     fn poll(&mut self, ctx: &mut Context) -> Result<TaskStatus, String> {
-        let mut to_replace;
-        use std::ops::DerefMut;
-        match self.word.borrow_mut().deref_mut() {
-            parser::RawWord::String(ref mut s, _) => {
-                if self.expand_tilde {
-                    expand_tilde(s)?;
-                }
-                return Ok(TaskStatus::Success(0));
+        let mut program = None;
+        let mut to_replace = None;
+        use std::ops::{Deref, DerefMut};
+        if let parser::RawWord::String(ref mut s, _) = self.word.borrow_mut().deref_mut() {
+            if self.expand_tilde {
+                expand_tilde(s)?;
             }
+            return Ok(TaskStatus::Success(0));
+        }
+        match self.word.borrow().deref() {
             parser::RawWord::Parameter(param) => {
                 let mut val = ctx.get_parameter_value(&param.name);
                 if val.is_none() {
@@ -80,7 +136,35 @@ impl TaskImpl for Word {
                 //*self.word.borrow_mut()
                 to_replace = Some(parser::RawWord::String(val.unwrap(), false));
             }
+            parser::RawWord::Command(prog) => {
+                program = Some(prog.clone());
+            }
             _ => panic!(),
+        }
+        if let Some(prog) = program {
+            if !self.started {
+                self.start_command(prog, ctx)?;
+                self.started = true;
+
+                let mut buf = Vec::new();
+                {
+                    let mut f = unsafe { File::from_raw_fd(self.fd) };
+                    use std::io::Read;
+                    f.read_to_end(&mut buf)
+                        .map_err(|e| format!("failed to read command output: {}", e))?;
+                }
+                self.fd = -1;
+
+                // strip newlines
+                let mut s = String::from_utf8(buf).unwrap();
+                while s.ends_with('\n') {
+                    s.pop();
+                }
+
+                *self.word.borrow_mut() = parser::RawWord::String(s, false);
+            }
+
+            return self.process.as_mut().unwrap().borrow_mut().poll();
         }
         *self.word.borrow_mut() = to_replace.unwrap();
         Ok(TaskStatus::Success(0))

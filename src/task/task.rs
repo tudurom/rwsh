@@ -45,7 +45,7 @@ impl Task {
                     } else {
                         return Err(Box::new(e));
                     }
-                },
+                }
                 Ok(stat) => ctx.state.update_process(stat.pid().unwrap(), stat),
             }
         }
