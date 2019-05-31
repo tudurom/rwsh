@@ -17,7 +17,7 @@ use nix::sys::wait;
 use std::error::Error;
 use std::ops::Deref;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum TaskStatus {
     Wait,
     Success(i32),

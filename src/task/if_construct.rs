@@ -54,7 +54,7 @@ impl TaskImpl for ElseConstruct {
             self.body.poll(ctx)
         } else {
             ctx.state.if_condition_ok = None;
-            Ok(TaskStatus::Success(0))
+            Ok(TaskStatus::Success(ctx.state.last_status))
         }
     }
 }
