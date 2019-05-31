@@ -29,6 +29,7 @@ This is going to be a UNIX shell based around [Structural Regular Expressions][s
     - [x] Assignment
     - [ ] Arrays / Lists
     - [ ] Maps
+- [x] Command substitution
 - [ ] Control flow structures
     - [x] If-else
     - [ ] While
@@ -38,3 +39,5 @@ This is going to be a UNIX shell based around [Structural Regular Expressions][s
 - [ ] Builtins
     - [x] `cd`
     - [x] `exit`
+    - [x] `true` / `false`
+    - [x] `eval`
