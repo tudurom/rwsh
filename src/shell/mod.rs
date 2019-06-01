@@ -1,6 +1,7 @@
 use crate::parser::{Parser, Program};
 use crate::task::{Task, TaskStatus};
 use crate::util::{BufReadChars, InteractiveLineReader, LineReader};
+use nix::sys::signal;
 use nix::sys::wait::WaitStatus;
 use nix::unistd::Pid;
 use std::cell::RefCell;
@@ -9,7 +10,6 @@ use std::env;
 use std::error::Error;
 use std::process::exit;
 use std::rc::Rc;
-use nix::sys::signal;
 
 #[derive(Clone, Debug)]
 pub enum Var {
