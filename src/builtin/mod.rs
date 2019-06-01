@@ -1,10 +1,12 @@
 use crate::shell::Context;
 
+mod calc;
 mod cd;
 mod eval;
 mod exit;
 mod r#let;
 mod r#true;
+use self::calc::calc;
 use cd::cd;
 use eval::eval;
 use exit::exit;
@@ -27,8 +29,9 @@ macro_rules! b {
         }
     };
 }
-static BULTINS: [Builtin; 7] = [
+static BULTINS: [Builtin; 8] = [
     // keep sorted pls
+    b!(calc),
     b!(cd),
     b!(eval),
     b!(exit),

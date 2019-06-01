@@ -22,8 +22,10 @@ This is going to be a UNIX shell based around [Structural Regular Expressions][s
     - [x] Basic commands (`a`, `c`, `i`, `d`, `p`)
     - [x] Loops
 - [ ] Shell stuff:
-    - [ ] Handle signals
+    - [x] Handle signals
     - [x] Load scripts
+	- [ ] Redirection
+    - [ ] Job control (God have mercy)
 - [ ] Variables and variable substitution
     - [x] Strings
     - [x] Assignment
@@ -41,3 +43,4 @@ This is going to be a UNIX shell based around [Structural Regular Expressions][s
     - [x] `exit`
     - [x] `true` / `false`
     - [x] `eval`
+	- [x] `calc`
