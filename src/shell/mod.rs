@@ -9,6 +9,7 @@ use std::env;
 use std::error::Error;
 use std::process::exit;
 use std::rc::Rc;
+use nix::sys::signal;
 
 #[derive(Clone, Debug)]
 pub enum Var {
@@ -160,6 +161,7 @@ impl<R: LineReader> Shell<R> {
 
     /// Start the REPL.
     pub fn run(&mut self) {
+        self.install_signal_handlers();
         for t in self.p.by_ref() {
             if let Ok(p) = t {
                 if p.0.is_empty() {
@@ -175,6 +177,12 @@ impl<R: LineReader> Shell<R> {
             }
         }
         std::process::exit(self.state.exit);
+    }
+
+    fn install_signal_handlers(&self) {
+        unsafe {
+            signal::signal(signal::Signal::SIGCHLD, signal::SigHandler::SigIgn).unwrap();
+        }
     }
 }
 
