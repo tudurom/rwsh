@@ -1,3 +1,5 @@
+pub mod pretty;
+
 use crate::parser::{Parser, Program};
 use crate::task::{Task, TaskStatus};
 use crate::util::{BufReadChars, InteractiveLineReader, LineReader};
@@ -25,13 +27,20 @@ impl std::string::ToString for Var {
 }
 
 #[derive(Clone, Default)]
-/// The current state of the shell
+/// The config options of the shell.
+pub struct Config {
+    pub pretty_print: bool,
+}
+
+#[derive(Clone, Default)]
+/// The current state of the shell.
 pub struct State {
     pub exit: i32,
     pub processes: Vec<Rc<RefCell<Process>>>,
     pub vars: HashMap<String, Var>,
     pub last_status: i32,
     pub if_condition_ok: Option<bool>,
+    pub config: Config,
 }
 
 fn read_vars() -> HashMap<String, Var> {
@@ -43,13 +52,14 @@ fn read_vars() -> HashMap<String, Var> {
 }
 
 impl State {
-    pub fn new() -> State {
+    pub fn new(config: Config) -> State {
         State {
             exit: 0,
             last_status: 0,
             processes: Vec::new(),
             vars: read_vars(),
             if_condition_ok: None,
+            config,
         }
     }
 
@@ -143,19 +153,19 @@ pub struct Shell<R: LineReader> {
 
 impl Shell<InteractiveLineReader> {
     /// Create a new `Shell` with an [`InteractiveLineReader`](../util/struct.InteractiveLineReader.html).
-    pub fn new_interactive() -> Shell<InteractiveLineReader> {
-        Self::new(InteractiveLineReader::new())
+    pub fn new_interactive(config: Config) -> Shell<InteractiveLineReader> {
+        Self::new(InteractiveLineReader::new(), config)
     }
 }
 
 impl<R: LineReader> Shell<R> {
     /// Returns a new `Shell` with the given [`LineReader`](../util/trait.LineReader.html).
-    pub fn new(r: R) -> Shell<R> {
+    pub fn new(r: R, config: Config) -> Shell<R> {
         let buf = BufReadChars::new(r);
         let p = Parser::new(buf);
         Shell {
             p,
-            state: State::new(),
+            state: State::new(config),
         }
     }
 
@@ -164,12 +174,17 @@ impl<R: LineReader> Shell<R> {
         self.install_signal_handlers();
         for t in self.p.by_ref() {
             if let Ok(p) = t {
-                if p.0.is_empty() {
-                    continue;
-                }
-                match run_program(p, &mut self.state) {
-                    Ok(status) => self.state.exit = status.0,
-                    Err(error) => eprintln!("{}", error),
+                if self.state.config.pretty_print {
+                    use pretty::PrettyPrint;
+                    p.pretty_print().print()
+                } else {
+                    if p.0.is_empty() {
+                        continue;
+                    }
+                    match run_program(p, &mut self.state) {
+                        Ok(status) => self.state.exit = status.0,
+                        Err(error) => eprintln!("{}", error),
+                    }
                 }
             } else if let Err(e) = t {
                 eprintln!("{}", e);
@@ -188,7 +203,7 @@ impl<R: LineReader> Shell<R> {
 
 impl Default for Shell<InteractiveLineReader> {
     fn default() -> Self {
-        Self::new_interactive()
+        Self::new_interactive(Default::default())
     }
 }
 

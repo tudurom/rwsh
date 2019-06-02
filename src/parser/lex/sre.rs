@@ -15,8 +15,11 @@ pub enum Token {
     Dollar,
 }
 
-pub fn lex_address<R: LineReader>(it: &mut BufReadChars<R>) -> Result<Vec<Token>, ParseError> {
+pub fn lex_address<R: LineReader>(
+    it: &mut BufReadChars<R>,
+) -> Result<(Vec<Token>, String), ParseError> {
     let mut v: Vec<Token> = Vec::new();
+    let mut original = String::new();
     while let Some(&c) = it.peek() {
         if c == '\n' || c == '|' {
             // we either reached \n as a separator, or the pizza operator
@@ -52,9 +55,10 @@ pub fn lex_address<R: LineReader>(it: &mut BufReadChars<R>) -> Result<Vec<Token>
         } else {
             break;
         }
+        original.push(c);
     }
 
-    Ok(v)
+    Ok((v, original))
 }
 
 fn scan_space<R: LineReader>(it: &mut BufReadChars<R>) {
@@ -160,16 +164,8 @@ mod tests {
     fn address_lex() {
         let mut buf = new_dummy_buf("-0+,+320-d".lines());
         assert_eq!(
-            Ok(vec![
-                Minus,
-                LineAddr(0),
-                Plus,
-                Comma,
-                Plus,
-                LineAddr(320),
-                Minus,
-            ],),
-            super::lex_address(&mut buf)
+            vec![Minus, LineAddr(0), Plus, Comma, Plus, LineAddr(320), Minus,],
+            super::lex_address(&mut buf).unwrap().0
         );
     }
 }

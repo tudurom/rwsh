@@ -4,6 +4,7 @@ pub mod misc;
 pub mod sre;
 
 use self::lex::{Lexer, Token};
+use crate::shell::pretty::*;
 use crate::util::{BufReadChars, LineReader, ParseError};
 use result::ResultOptionExt;
 use sre::Command as SRECommand;
@@ -107,6 +108,39 @@ impl Into<Word> for RawWord {
     }
 }
 
+impl PrettyPrint for RawWord {
+    fn pretty_print(&self) -> PrettyTree {
+        match self {
+            RawWord::String(s, quoted) => PrettyTree {
+                text: format!(
+                    "word string{} {}",
+                    if *quoted { " (quoted)" } else { "" },
+                    s
+                ),
+                children: vec![],
+            },
+            RawWord::Parameter(param) => PrettyTree {
+                text: "word parameter".to_owned(),
+                children: vec![PrettyTree {
+                    text: format!("name: {}", param.name),
+                    children: vec![],
+                }],
+            },
+            RawWord::List(words, quoted) => PrettyTree {
+                text: format!("word list{}", if *quoted { " (quoted)" } else { "" }),
+                children: words
+                    .iter()
+                    .map(|w| naked_word(w.clone()).pretty_print())
+                    .collect(),
+            },
+            RawWord::Command(prog) => PrettyTree {
+                text: "word command".to_owned(),
+                children: vec![prog.pretty_print()],
+            },
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 /// A command tuple is made of its name and its arguments.
 pub struct SimpleCommand(pub Word, pub Vec<Word>);
@@ -116,6 +150,15 @@ pub struct SimpleCommand(pub Word, pub Vec<Word>);
 ///
 /// Something like `|> ,a/append/ |> 1,2p`.
 pub struct SRESequence(pub Vec<SRECommand>);
+
+impl PrettyPrint for SRESequence {
+    fn pretty_print(&self) -> PrettyTree {
+        PrettyTree {
+            text: "SRE sequence".to_owned(),
+            children: self.0.iter().map(|c| c.pretty_print()).collect(),
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 /// A chain of [`Command`s](enum.Command.html) piped together
@@ -129,8 +172,28 @@ pub enum Node {
 #[derive(Debug, PartialEq, Clone)]
 pub struct CommandList(pub Node);
 
+impl PrettyPrint for CommandList {
+    fn pretty_print(&self) -> PrettyTree {
+        match &self.0 {
+            Node::Pipeline(p) => PrettyTree {
+                text: "command list - pipeline".to_owned(),
+                children: p.0.iter().map(|c| c.pretty_print()).collect(),
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program(pub Vec<CommandList>);
+
+impl PrettyPrint for Program {
+    fn pretty_print(&self) -> PrettyTree {
+        PrettyTree {
+            text: "program".to_owned(),
+            children: self.0.iter().map(|c| c.pretty_print()).collect(),
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 /// A command can be a simple command, a brace group or a control structure.
@@ -147,6 +210,65 @@ pub enum Command {
     ElseConstruct(Program),
     /// Like `IfConstruct`, first is the condition, second is the body.
     WhileConstruct(Program, Program),
+}
+
+impl PrettyPrint for Command {
+    fn pretty_print(&self) -> PrettyTree {
+        match self {
+            Command::SimpleCommand(sc) => PrettyTree {
+                text: "simple command".to_owned(),
+                children: vec![
+                    PrettyTree {
+                        text: "name".to_owned(),
+                        children: vec![naked_word(sc.0.clone()).pretty_print()],
+                    },
+                    PrettyTree {
+                        text: "args".to_owned(),
+                        children: sc
+                            .1
+                            .iter()
+                            .map(|w| naked_word(w.clone()).pretty_print())
+                            .collect(),
+                    },
+                ],
+            },
+            Command::SREProgram(seq) => seq.pretty_print(),
+            Command::BraceGroup(cls) => PrettyTree {
+                text: "brace group".to_owned(),
+                children: cls.iter().map(|cl| cl.pretty_print()).collect(),
+            },
+            Command::IfConstruct(condition, body) => PrettyTree {
+                text: "if construct".to_owned(),
+                children: vec![
+                    PrettyTree {
+                        text: "condition - program".to_owned(),
+                        children: condition.pretty_print().children,
+                    },
+                    PrettyTree {
+                        text: "body - program".to_owned(),
+                        children: body.pretty_print().children,
+                    },
+                ],
+            },
+            Command::ElseConstruct(body) => PrettyTree {
+                text: "else construct - program".to_owned(),
+                children: body.pretty_print().children,
+            },
+            Command::WhileConstruct(condition, body) => PrettyTree {
+                text: "while construct".to_owned(),
+                children: vec![
+                    PrettyTree {
+                        text: "condition - program".to_owned(),
+                        children: condition.pretty_print().children,
+                    },
+                    PrettyTree {
+                        text: "body - program".to_owned(),
+                        children: body.pretty_print().children,
+                    },
+                ],
+            },
+        }
+    }
 }
 
 /// Parses the series of [`Token`s](./lex/enum.Token.html) to the AST ([`ParseNode`s](enum.ParseNode.html)).
@@ -323,14 +445,14 @@ impl<R: LineReader> Parser<R> {
         let lparen = lparen.unwrap().unwrap();
         let condition = match self.parse_program(false) {
             None => {
-                return Some(Err(lparen
-                    .new_error("expected if condition, got EOF".to_owned())))
+                return Some(Err(
+                    lparen.new_error("expected if condition, got EOF".to_owned())
+                ))
             }
             Some(Err(e)) => return Some(Err(e)),
             Some(Ok(p)) => {
                 if p.0.is_empty() {
-                    return Some(Err(lparen
-                        .new_error("expected if condition".to_owned())));
+                    return Some(Err(lparen.new_error("expected if condition".to_owned())));
                 }
                 p
             }
@@ -343,10 +465,7 @@ impl<R: LineReader> Parser<R> {
         }
         let rparen = rparen.unwrap().unwrap();
         let body = match self.parse_program(false) {
-            None => {
-                return Some(Err(rparen
-                    .new_error("expected if body, got EOF".to_owned())))
-            }
+            None => return Some(Err(rparen.new_error("expected if body, got EOF".to_owned()))),
             Some(Err(e)) => return Some(Err(e)),
             Some(Ok(b)) => b,
         };
@@ -389,26 +508,34 @@ impl<R: LineReader> Parser<R> {
         let lparen = lparen.unwrap().unwrap();
         let condition = match self.parse_program(false) {
             None => {
-                return Some(Err(lparen
-                                .new_error("expected while condition, got EOF".to_owned())))
+                return Some(Err(
+                    lparen.new_error("expected while condition, got EOF".to_owned())
+                ))
             }
             Some(Err(e)) => return Some(Err(e)),
             Some(Ok(p)) => {
                 if p.0.is_empty() {
-                    return Some(Err(lparen
-                                    .new_error("expected while condition".to_owned())));
+                    return Some(Err(lparen.new_error("expected while condition".to_owned())));
                 }
                 p
             }
         };
         let rparen = self.next_tok();
-        if let Err(e) = check_condition_symbol(rparen.clone(), ')', lex::TokenKind::RParen, "while", while_tok) {
+        if let Err(e) = check_condition_symbol(
+            rparen.clone(),
+            ')',
+            lex::TokenKind::RParen,
+            "while",
+            while_tok,
+        ) {
             return Some(Err(e));
         }
         let rparen = rparen.unwrap().unwrap();
         let body = match self.parse_program(false) {
             None => {
-                return Some(Err(rparen.new_error("expected while body, got EOF".to_owned())))
+                return Some(Err(
+                    rparen.new_error("expected while body, got EOF".to_owned())
+                ))
             }
             Some(Err(e)) => return Some(Err(e)),
             Some(Ok(b)) => b,
@@ -485,13 +612,9 @@ impl<R: LineReader> Parser<R> {
                 self.parse_simple_command()
                     .map(|r| r.map(Command::SimpleCommand))
             }
-            Some(Ok(lex::Token {
-                ref kind,
-                ..
-            })) if can_start_word(kind) => {
-                self.parse_simple_command()
-                .map(|r| r.map(Command::SimpleCommand))
-            }
+            Some(Ok(lex::Token { ref kind, .. })) if can_start_word(kind) => self
+                .parse_simple_command()
+                .map(|r| r.map(Command::SimpleCommand)),
             None => None,
             Some(Err(e)) => Some(Err(e)),
             Some(Ok(x)) => Some(Err(x.new_error(format!("unexpected token {:?}", x)))),
@@ -896,7 +1019,7 @@ pub mod tests {
     #[test]
     fn read_parameter_word() {
         let mut p = super::Parser::new(new_dummy_buf("$PARAM".lines()));
-        p.next();
+        p.lexer.borrow_mut().next();
         assert_eq!(
             p.parse_word_parameter().unwrap(),
             super::RawWord::Parameter(super::WordParameter {

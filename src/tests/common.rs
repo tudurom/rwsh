@@ -27,7 +27,7 @@ pub fn new_dummy_buf(l: Lines) -> BufReadChars<DummyLineReader> {
 
 pub fn new_composed_address(addr: &'static str) -> ComposedAddress {
     let mut buf = new_dummy_buf(addr.lines());
-    Parser::new(&mut buf).unwrap().parse().unwrap().unwrap()
+    Parser::new(&mut buf).unwrap().0.parse().unwrap().unwrap()
 }
 
 pub fn new_buffer(text: &'static str) -> Buffer {

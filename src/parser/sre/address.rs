@@ -144,12 +144,16 @@ pub struct Parser<I: Iterator<Item = Token>> {
 impl Parser<IntoIter<Token>> {
     pub fn new<R: LineReader>(
         it: &mut BufReadChars<R>,
-    ) -> Result<Parser<IntoIter<Token>>, ParseError> {
-        let it = lex_address(it)?.into_iter();
-        Ok(Parser {
-            tokens: RefCell::new(it.peekable()),
-            addr_set: AddressSet::new(),
-        })
+    ) -> Result<(Parser<IntoIter<Token>>, String), ParseError> {
+        let (tokens, original) = lex_address(it)?;
+        let it = tokens.into_iter();
+        Ok((
+            Parser {
+                tokens: RefCell::new(it.peekable()),
+                addr_set: AddressSet::new(),
+            },
+            original,
+        ))
     }
 }
 
@@ -296,7 +300,7 @@ mod tests {
     fn simple_address() {
         let s = "-0+";
         let mut buf = new_dummy_buf(s.lines());
-        let p = super::Parser::new(&mut buf).unwrap();
+        let p = super::Parser::new(&mut buf).unwrap().0;
         let x = p.parse_simple_address().unwrap();
         assert_eq!(
             p.addr_set.compose(x),
@@ -365,7 +369,7 @@ mod tests {
             })),
         }));
         let mut buf = new_dummy_buf(s.lines());
-        let p = super::Parser::new(&mut buf).unwrap();
+        let p = super::Parser::new(&mut buf).unwrap().0;
         assert_eq!(p.parse(), ok);
     }
 }

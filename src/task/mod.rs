@@ -1,16 +1,16 @@
 mod command;
 mod if_construct;
-mod while_construct;
 mod pipeline;
 mod sresequence;
 mod tasklist;
+mod while_construct;
 mod word;
 pub use command::Command;
 pub use if_construct::{ElseConstruct, IfConstruct};
-pub use while_construct::WhileConstruct;
 pub use pipeline::Pipeline;
 pub use sresequence::SRESequence;
 pub use tasklist::TaskList;
+pub use while_construct::WhileConstruct;
 pub use word::Word;
 
 use crate::parser;
@@ -136,7 +136,9 @@ impl Task {
                 parser::Command::BraceGroup(arr) => Self::new_from_command_lists(arr),
                 parser::Command::IfConstruct(condition, body) => Self::new_from_if(condition, body),
                 parser::Command::ElseConstruct(body) => Self::new_from_else(body),
-                parser::Command::WhileConstruct(condition, body) => Self::new_from_while(condition, body),
+                parser::Command::WhileConstruct(condition, body) => {
+                    Self::new_from_while(condition, body)
+                }
             });
         }
 

@@ -377,6 +377,7 @@ mod tests {
                 'a',
                 vec!["pizza".to_owned()],
                 vec![],
+                String::new(),
             )))),
             Ok(tok!(Space)),
             Ok(tok!(Pipe)),
