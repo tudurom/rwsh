@@ -1,11 +1,13 @@
 mod command;
 mod if_construct;
+mod while_construct;
 mod pipeline;
 mod sresequence;
 mod tasklist;
 mod word;
 pub use command::Command;
 pub use if_construct::{ElseConstruct, IfConstruct};
+pub use while_construct::WhileConstruct;
 pub use pipeline::Pipeline;
 pub use sresequence::SRESequence;
 pub use tasklist::TaskList;
@@ -117,6 +119,13 @@ impl Task {
         ))))
     }
 
+    pub fn new_from_while(condition: parser::Program, body: parser::Program) -> Self {
+        Task::new(Box::new(WhileConstruct::new(
+            Self::new_from_command_lists(condition.0),
+            Self::new_from_command_lists(body.0),
+        )))
+    }
+
     pub fn new_from_pipeline(p: parser::Pipeline) -> Self {
         let mut tp = Pipeline::new();
 
@@ -127,6 +136,7 @@ impl Task {
                 parser::Command::BraceGroup(arr) => Self::new_from_command_lists(arr),
                 parser::Command::IfConstruct(condition, body) => Self::new_from_if(condition, body),
                 parser::Command::ElseConstruct(body) => Self::new_from_else(body),
+                parser::Command::WhileConstruct(condition, body) => Self::new_from_while(condition, body),
             });
         }
 

@@ -145,6 +145,8 @@ pub enum Command {
     IfConstruct(Program, Program),
     /// An else construct. The tuple contains the body.
     ElseConstruct(Program),
+    /// Like `IfConstruct`, first is the condition, second is the body.
+    WhileConstruct(Program, Program),
 }
 
 /// Parses the series of [`Token`s](./lex/enum.Token.html) to the AST ([`ParseNode`s](enum.ParseNode.html)).
@@ -317,19 +319,16 @@ impl<R: LineReader> Parser<R> {
         ) {
             return Some(Err(e));
         }
-        let prog = match self.parse_program(false) {
+        let lparen = lparen.unwrap().unwrap();
+        let condition = match self.parse_program(false) {
             None => {
                 return Some(Err(lparen
-                    .unwrap()
-                    .unwrap()
                     .new_error("expected if condition, got EOF".to_owned())))
             }
             Some(Err(e)) => return Some(Err(e)),
             Some(Ok(p)) => {
                 if p.0.is_empty() {
                     return Some(Err(lparen
-                        .unwrap()
-                        .unwrap()
                         .new_error("expected if condition".to_owned())));
                 }
                 p
@@ -341,18 +340,17 @@ impl<R: LineReader> Parser<R> {
         {
             return Some(Err(e));
         }
+        let rparen = rparen.unwrap().unwrap();
         let body = match self.parse_program(false) {
             None => {
                 return Some(Err(rparen
-                    .unwrap()
-                    .unwrap()
                     .new_error("expected if body, got EOF".to_owned())))
             }
             Some(Err(e)) => return Some(Err(e)),
             Some(Ok(b)) => b,
         };
         self.lexer.borrow_mut().ps2_exit();
-        Some(Ok(Command::IfConstruct(prog, body)))
+        Some(Ok(Command::IfConstruct(condition, body)))
     }
 
     fn parse_else(&mut self) -> Option<Result<Command, ParseError>> {
@@ -370,6 +368,52 @@ impl<R: LineReader> Parser<R> {
         };
         self.lexer.borrow_mut().ps2_exit();
         Some(Ok(Command::ElseConstruct(body)))
+    }
+
+    fn parse_while(&mut self) -> Option<Result<Command, ParseError>> {
+        let while_tok = self.next_tok().unwrap().unwrap(); // while keyword
+        self.lexer.borrow_mut().ps2_enter("while".to_owned());
+
+        self.skip_space(false);
+        let lparen = self.next_tok(); // (
+        if let Err(e) = check_condition_symbol(
+            lparen.clone(),
+            '(',
+            lex::TokenKind::LParen,
+            "while",
+            while_tok.clone(),
+        ) {
+            return Some(Err(e));
+        }
+        let lparen = lparen.unwrap().unwrap();
+        let condition = match self.parse_program(false) {
+            None => {
+                return Some(Err(lparen
+                                .new_error("expected while condition, got EOF".to_owned())))
+            }
+            Some(Err(e)) => return Some(Err(e)),
+            Some(Ok(p)) => {
+                if p.0.is_empty() {
+                    return Some(Err(lparen
+                                    .new_error("expected while condition".to_owned())));
+                }
+                p
+            }
+        };
+        let rparen = self.next_tok();
+        if let Err(e) = check_condition_symbol(rparen.clone(), ')', lex::TokenKind::RParen, "while", while_tok) {
+            return Some(Err(e));
+        }
+        let rparen = rparen.unwrap().unwrap();
+        let body = match self.parse_program(false) {
+            None => {
+                return Some(Err(rparen.new_error("expected while body, got EOF".to_owned())))
+            }
+            Some(Err(e)) => return Some(Err(e)),
+            Some(Ok(b)) => b,
+        };
+        self.lexer.borrow_mut().ps2_exit();
+        Some(Ok(Command::WhileConstruct(condition, body)))
     }
 
     fn parse_command(&mut self) -> Option<Result<Command, ParseError>> {
@@ -433,6 +477,7 @@ impl<R: LineReader> Parser<R> {
                     match s.as_ref() {
                         "if" => return self.parse_if(),
                         "else" => return self.parse_else(),
+                        "while" => return self.parse_while(),
                         _ => {}
                     }
                 }
