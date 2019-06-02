@@ -208,7 +208,8 @@ impl<R: LineReader> Parser<R> {
                     self.next_tok();
                     break;
                 }
-                lex::TokenKind::Word(_) | lex::TokenKind::LBrace => {}
+                ref kind if can_start_word(kind) => {}
+                lex::TokenKind::LBrace => {}
                 _ => break,
             }
             match self.parse_command_list() {
@@ -483,6 +484,13 @@ impl<R: LineReader> Parser<R> {
                 }
                 self.parse_simple_command()
                     .map(|r| r.map(Command::SimpleCommand))
+            }
+            Some(Ok(lex::Token {
+                ref kind,
+                ..
+            })) if can_start_word(kind) => {
+                self.parse_simple_command()
+                .map(|r| r.map(Command::SimpleCommand))
             }
             None => None,
             Some(Err(e)) => Some(Err(e)),
