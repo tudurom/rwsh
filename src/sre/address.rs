@@ -1,5 +1,6 @@
 use super::{Buffer, Range};
 use crate::parser::sre::address::{ComposedAddress, SimpleAddress};
+use crate::util::regex;
 
 #[derive(Debug)]
 pub enum AddressResolveError {
@@ -171,7 +172,7 @@ impl<'a> Address<'a> {
     fn regex_address(self, re: &str, sign: i32) -> Result<Self, AddressResolveError> {
         let mut loc;
         let mut l: usize;
-        let re = match regex::Regex::new(re) {
+        let re = match regex(re) {
             Ok(re) => re,
             Err(e) => return Err(AddressResolveError::RegexError(e)),
         };

@@ -268,3 +268,7 @@ pub mod tests {
         assert_eq!(buf.collect::<Vec<char>>(), correct);
     }
 }
+
+pub fn regex(r: &str) -> Result<regex::Regex, regex::Error> {
+    regex::RegexBuilder::new(r).multi_line(true).build()
+}

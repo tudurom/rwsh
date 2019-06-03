@@ -2,10 +2,7 @@
 use super::*;
 use std::io::Write;
 use std::str::FromStr;
-
-fn regex(r: &str) -> Result<regex::Regex, regex::Error> {
-    regex::RegexBuilder::new(r).multi_line(true).build()
-}
+use crate::util::regex;
 
 #[derive(Debug, PartialEq)]
 pub struct P;
