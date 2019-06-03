@@ -1,0 +1,10 @@
+if (test a = a) {
+	echo true a == a
+	if (test b != b) echo true b != b
+	else {
+		echo false b != b
+		if (test 3 -gt 2) echo "true 3 > 2"
+		else echo "false 3 > 2"
+	}
+}
+else echo false a == a

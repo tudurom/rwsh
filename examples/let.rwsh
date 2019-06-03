@@ -1,0 +1,16 @@
+let a 5
+echo $a
+
+let b $a
+let a 10
+echo $a
+echo $b
+
+let a "unu doi"
+let b "trei patru"
+let c "cinci șase"
+echo $a $b $c
+
+let a 1
+let a $(calc $a + 4)
+echo $a

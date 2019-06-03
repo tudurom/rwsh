@@ -1,0 +1,6 @@
+au
+c
+a&&b
+c
+something else
+another $(echo one)

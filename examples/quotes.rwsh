@@ -1,0 +1,6 @@
+echo 'au\
+c'
+echo 'a&&b
+c'
+echo "something $(echo "el"'s'e)"
+echo "another "'$(echo one)'

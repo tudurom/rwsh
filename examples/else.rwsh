@@ -1,0 +1,2 @@
+if (test 3 -eq 2) echo fail
+else echo pass

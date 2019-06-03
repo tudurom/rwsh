@@ -1,0 +1,6 @@
+echo Hello World  # this one prints hello world, an iconic message in programming
+
+#echo Bye world
+	# another one
+echo a tab	#comment
+echo this#is#not#a#comment # this one is though

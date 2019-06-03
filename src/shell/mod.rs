@@ -196,7 +196,7 @@ impl<R: LineReader> Shell<R> {
 
     fn install_signal_handlers(&self) {
         unsafe {
-            signal::signal(signal::Signal::SIGCHLD, signal::SigHandler::SigIgn).unwrap();
+            //signal::signal(signal::Signal::SIGCHLD, signal::SigHandler::SigIgn).unwrap();
         }
     }
 }
