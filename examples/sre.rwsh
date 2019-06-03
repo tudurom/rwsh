@@ -47,4 +47,4 @@ echo $bacovia |> ,x/alb(i|e)|negr(i|e)/ {
 	g/negri/ c/albi/
 	g/albe/ c/negre/
 	g/negre/ c/albe/
-} |> ,p | sort
+} |> ,p | env LC_ALL=C sort
