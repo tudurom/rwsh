@@ -16,7 +16,7 @@ tasks:
       cargo test --verbose
   - examples: |
       cd rwsh/examples
-      ./run_examples
+      ./run_examples.sh
   - push_to_github: |
       cd rwsh
       git push --all "https://tudurom:$(cat ~/.gh_pass)@github.com/tudurom/rwsh"
