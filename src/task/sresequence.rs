@@ -53,6 +53,6 @@ impl TaskImpl for SRESequence {
             self.started = true;
         }
 
-        self.process.clone().unwrap().borrow_mut().poll()
+        self.process.as_ref().unwrap().borrow_mut().poll()
     }
 }

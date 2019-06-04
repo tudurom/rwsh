@@ -41,7 +41,7 @@ impl Pipeline {
 
             let new_stdout = if i < len - 1 {
                 let (read_pipe, write_pipe) =
-                    unistd::pipe().map_err(|e| format!("failed to pipe: {}", e))?;
+                    unistd::pipe2(nix::fcntl::OFlag::O_CLOEXEC).map_err(|e| format!("failed to pipe: {}", e))?;
                 last_stdout = read_pipe;
                 write_pipe
             } else {

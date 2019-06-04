@@ -22,10 +22,10 @@ This is going to be a UNIX shell based around [Structural Regular Expressions][s
     - [x] Basic commands (`a`, `c`, `i`, `d`, `p`)
     - [x] Loops
 - [ ] Shell stuff:
-    - [x] Handle signals
     - [x] Load scripts
 	- [ ] Redirection
     - [ ] Job control (God have mercy)
+        - [ ] Handle signals
 - [ ] Variables and variable substitution
     - [x] Strings
     - [x] Assignment

@@ -62,7 +62,7 @@ impl Command {
             self.started = true;
         }
 
-        self.process.clone().unwrap().borrow_mut().poll()
+        self.process.as_ref().unwrap().borrow_mut().poll()
     }
 
     fn builtin_poll(&mut self, ctx: &mut Context) -> Result<TaskStatus, String> {
