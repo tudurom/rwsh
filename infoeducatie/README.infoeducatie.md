@@ -50,9 +50,9 @@ Shell), `zsh` (Z Shell), `fish` (Friendly Interactive Shell) etc.
 
 Pe platformele descendente din UNIX, precum Linux și MacOS, programele care
 operează în modul text se bazează pe schimbul și prelucrarea informației de tip
-_text simplu_, fără alte formate binare (precum pe Windows). Fișierele de
-configurație pentru programe sunt exprimate în text simplu, precum și
-documentele precum manualul sistemului, care sunt exprimate într-un limbaj
+_text simplu_, fără alte formate binare (ca pe Windows). Fișierele de
+configurație pentru programe sunt exprimate în text simplu, cât și
+documentele cum ar fi manualul sistemului, care sunt exprimate într-un limbaj
 special, spre deosebire de programe precum _Microsoft Word_ care stochează
 documentele într-un format binar.
 
@@ -298,7 +298,7 @@ declarate automat la atribuire.
 let nume Tudor
 echo "Salut, $nume!" # Va afisa "Salut, Tudor!"
 
-let nume Andei
+let nume Andrei
 echo "Salut, $nume!" # Va afisa "Salut, Andrei!"
 ```
 
