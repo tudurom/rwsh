@@ -15,12 +15,17 @@ This is going to be a UNIX shell based around [Structural Regular Expressions][s
 
 ## To do:
 
+See `todo/todo.txt`.
+
 - [x] Basic command execution with quoted string rules
 - [x] Pipes
 - [x] Structural regular expressions
     - [x] Addresses
     - [x] Basic commands (`a`, `c`, `i`, `d`, `p`)
     - [x] Loops
+	- [ ] Variable and command substitution (with capture group values)
+	    - [ ] In addresses
+		- [ ] In command parameters
 - [ ] Shell stuff:
     - [x] Load scripts
 	- [ ] Redirection
@@ -36,7 +41,9 @@ This is going to be a UNIX shell based around [Structural Regular Expressions][s
     - [x] If-else
     - [ ] While
     - [ ] For
+	    - [ ] String globbing
     - [ ] Switch
+	- [ ] Matches (awk-like pattern list)
 - [ ] Functions
 - [ ] Builtins
     - [x] `cd`
@@ -44,3 +51,4 @@ This is going to be a UNIX shell based around [Structural Regular Expressions][s
     - [x] `true` / `false`
     - [x] `eval`
 	- [x] `calc`
+	- ...
