@@ -6,7 +6,6 @@ Maps
 For
 (B) String globbing
 Functions
-(A) Issue #1
 Switch
 Match
 Job control

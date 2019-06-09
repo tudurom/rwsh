@@ -1,8 +1,8 @@
 //! Implementations of SRE commands.
 use super::*;
+use crate::util::regex;
 use std::io::Write;
 use std::str::FromStr;
-use crate::util::regex;
 
 #[derive(Debug, PartialEq)]
 pub struct P;

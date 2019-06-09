@@ -308,7 +308,7 @@ impl<R: LineReader> Parser<R> {
         self.lexer.borrow_mut().next()
     }
 
-    fn parse_program(&mut self, absorb_newline: bool) -> Option<Result<Program, ParseError>> {
+    fn parse_program(&mut self, top_level: bool) -> Option<Result<Program, ParseError>> {
         let mut v = Vec::new();
         self.skip_space(true);
 
@@ -318,10 +318,10 @@ impl<R: LineReader> Parser<R> {
             if let Err(e) = p {
                 return Some(Err(e));
             }
-            let kind = p.unwrap().kind;
-            match kind {
+            let p = p.unwrap();
+            match p.kind {
                 lex::TokenKind::Newline => {
-                    if absorb_newline {
+                    if top_level {
                         self.next_tok();
                     }
                     break;
@@ -332,6 +332,10 @@ impl<R: LineReader> Parser<R> {
                 }
                 ref kind if can_start_word(kind) => {}
                 lex::TokenKind::LBrace => {}
+                lex::TokenKind::Pizza(_) => {}
+                _ if top_level => {
+                    return Some(Err(p.new_error(format!("unexpected token {:?}", p))))
+                }
                 _ => break,
             }
             match self.parse_command_list() {

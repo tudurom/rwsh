@@ -3,7 +3,6 @@ pub mod pretty;
 use crate::parser::{Parser, Program};
 use crate::task::{Task, TaskStatus};
 use crate::util::{BufReadChars, InteractiveLineReader, LineReader};
-use nix::sys::signal;
 use nix::sys::wait::WaitStatus;
 use nix::unistd::Pid;
 use std::cell::RefCell;
