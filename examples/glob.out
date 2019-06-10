@@ -1,0 +1,13 @@
+Cargo.toml
+examples/quotes.out examples/quotes.rwsh
+Cargo.toml
+Cargo.toml
+Cargo.lock Cargo.toml
+Cargo.toml
+Cargo.toml
+examples/nested_if.rwsh examples/nothing.rwsh examples/pipes.rwsh
+[]
+[] []
+one three two
+three two
+three two

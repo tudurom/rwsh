@@ -8,6 +8,7 @@ use std::ffi::{CString, OsStr};
 use std::ops::Deref;
 use std::os::unix::ffi::OsStrExt;
 use std::rc::Rc;
+use glob;
 
 pub struct Command {
     cmd: parser::SimpleCommand,
@@ -74,11 +75,38 @@ impl Command {
         )))
     }
 
-    fn get_args(&mut self, _ctx: &Context) {
+    fn get_args(&mut self, _ctx: &Context) -> Result<(), String> {
         self.args.push(word_to_str(self.cmd.0.clone()));
-        for arg in &self.cmd.1 {
-            self.args.push(word_to_str(arg.clone()));
+        for word_list in &self.cmd.1 {
+            let words = if let parser::RawWord::List(words, false) = word_list.borrow().deref() {
+                words.clone()
+            } else {
+                panic!();
+            };
+            let mut should_glob = false;
+            for word in &words {
+                if let parser::RawWord::String(s, false) = word.borrow().deref() {
+                    for c in s.chars() {
+                        should_glob = should_glob || (c == '*' || c == '?' || c == '[');
+                    }
+                }
+            }
+            if should_glob {
+                let mut original = String::new();
+                for word in &words {
+                    if let parser::RawWord::String(s, false) = word.borrow().deref() {
+                        original.push_str(&s);
+                    } else {
+                        original.push_str(&glob::Pattern::escape(&word_to_str(word.clone())));
+                    }
+                }
+                self.args.extend(glob::glob(&original).map_err(|e| format!("{}", e))?.filter_map(Result::ok).map(|p| String::from(p.to_str().unwrap())));
+            } else {
+                self.args.push(word_to_str(word_list.clone()));
+            }
         }
+
+        Ok(())
     }
 }
 
@@ -86,7 +114,7 @@ impl TaskImpl for Command {
     fn poll(&mut self, ctx: &mut Context) -> Result<TaskStatus, String> {
         ctx.state.if_condition_ok = None;
         if !self.started {
-            self.get_args(ctx);
+            self.get_args(ctx)?;
             self.t = if builtin::get_builtin(&self.args[0]).is_some() {
                 CommandType::Builtin
             } else {

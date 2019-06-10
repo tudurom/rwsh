@@ -2,9 +2,8 @@
 (C) Substitution in SRE commands
 Arrays
 Maps
-(C) While
+(B) While
 For
-(B) String globbing
 Functions
 Switch
 Match

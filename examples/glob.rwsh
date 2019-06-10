@@ -1,0 +1,21 @@
+cd ..
+
+echo *argo.toml
+echo examples/qu*.*
+echo [A-Z]argo.toml
+echo ?argo.toml
+echo Cargo.*
+echo Cargo?toml
+echo Cargo.[tqr]oml
+echo examples/[np]*.rwsh
+echo "[]"
+echo "[] []"
+
+mkdir glob_test
+touch glob_test/one glob_test/two glob_test/three
+cd glob_test
+echo *
+echo *[wh]*
+echo [t]*
+cd ..
+rm -r glob_test
