@@ -108,6 +108,19 @@ impl Into<Word> for RawWord {
     }
 }
 
+/// Returns a `Rc<RefCell<RawWord>>` (aka a `Word`) with the raw word cloned
+/// and its component words cloned like so recursively.
+pub fn deep_clone_word(w: &Word) -> Word {
+    use std::ops::Deref;
+    match w.borrow().deref() {
+        RawWord::String(s, b) => RawWord::String(s.clone(), *b),
+        RawWord::Parameter(wp) => RawWord::Parameter(wp.clone()),
+        RawWord::List(ws, b) => RawWord::List(ws.iter().map(deep_clone_word).collect(), *b),
+        RawWord::Command(prog) => RawWord::Command(prog.clone()),
+    }
+    .into()
+}
+
 impl PrettyPrint for RawWord {
     fn pretty_print(&self) -> PrettyTree {
         match self {
@@ -144,6 +157,15 @@ impl PrettyPrint for RawWord {
 #[derive(Debug, PartialEq, Clone)]
 /// A command tuple is made of its name and its arguments.
 pub struct SimpleCommand(pub Word, pub Vec<Word>);
+
+impl SimpleCommand {
+    pub fn with_deep_copied_word(&self) -> SimpleCommand {
+        SimpleCommand(
+            deep_clone_word(&self.0),
+            self.1.iter().map(deep_clone_word).collect(),
+        )
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 /// A chain of SRE commands.

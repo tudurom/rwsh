@@ -2,13 +2,13 @@ use super::*;
 use crate::builtin;
 use crate::parser;
 use crate::shell::{Context, Process};
+use glob;
 use nix::unistd;
 use std::cell::RefCell;
 use std::ffi::{CString, OsStr};
 use std::ops::Deref;
 use std::os::unix::ffi::OsStrExt;
 use std::rc::Rc;
-use glob;
 
 pub struct Command {
     cmd: parser::SimpleCommand,
@@ -100,7 +100,12 @@ impl Command {
                         original.push_str(&glob::Pattern::escape(&word_to_str(word.clone())));
                     }
                 }
-                self.args.extend(glob::glob(&original).map_err(|e| format!("{}", e))?.filter_map(Result::ok).map(|p| String::from(p.to_str().unwrap())));
+                self.args.extend(
+                    glob::glob(&original)
+                        .map_err(|e| format!("{}", e))?
+                        .filter_map(Result::ok)
+                        .map(|p| String::from(p.to_str().unwrap())),
+                );
             } else {
                 self.args.push(word_to_str(word_list.clone()));
             }

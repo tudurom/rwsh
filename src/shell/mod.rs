@@ -53,7 +53,7 @@ fn read_vars() -> HashMap<String, Var> {
 impl State {
     pub fn new(config: Config) -> State {
         State {
-            exit: 0,
+            exit: -1,
             last_status: 0,
             processes: Vec::new(),
             vars: read_vars(),
@@ -171,7 +171,14 @@ impl<R: LineReader> Shell<R> {
     /// Start the REPL.
     pub fn run(&mut self) {
         self.install_signal_handlers();
-        for t in self.p.by_ref() {
+        while self.state.exit == -1 {
+            let t = match self.p.by_ref().next() {
+                None => {
+                    self.state.exit = self.state.last_status;
+                    break;
+                }
+                Some(t) => t,
+            };
             if let Ok(p) = t {
                 if self.state.config.pretty_print {
                     use pretty::PrettyPrint;
@@ -181,7 +188,12 @@ impl<R: LineReader> Shell<R> {
                         continue;
                     }
                     match run_program(p, &mut self.state) {
-                        Ok(status) => self.state.exit = status.0,
+                        Ok(_status) => {
+                            // TODO: break on exit
+                            // if (status.0 != 0 && break_on_exit_flag) {
+                            //     self.state.exit = status.0
+                            // }
+                        }
                         Err(error) => eprintln!("{}", error),
                     }
                 }
@@ -190,7 +202,7 @@ impl<R: LineReader> Shell<R> {
                 exit(1);
             }
         }
-        std::process::exit(self.state.exit);
+        exit(self.state.exit);
     }
 
     fn install_signal_handlers(&self) {

@@ -1,7 +1,6 @@
 use crate::shell::Context;
-use std::process;
 
-pub fn exit(_ctx: &mut Context, args: Vec<&str>) -> i32 {
+pub fn exit(ctx: &mut Context, args: Vec<&str>) -> i32 {
     if args.len() > 2 {
         eprintln!("exit: Usage:\nexit [code]");
         return 1;
@@ -9,13 +8,14 @@ pub fn exit(_ctx: &mut Context, args: Vec<&str>) -> i32 {
 
     if args.len() == 2 {
         match args[1].parse::<i32>() {
-            Ok(i) => process::exit(i),
+            Ok(i) => ctx.state.exit = i,
             Err(_) => {
                 eprintln!("exit: exit code not an integer");
-                1
+                return 1;
             }
         }
     } else {
-        process::exit(0);
+        ctx.state.exit = 0;
     }
+    0
 }

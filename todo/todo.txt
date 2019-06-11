@@ -2,7 +2,6 @@
 (C) Substitution in SRE commands
 Arrays
 Maps
-(B) While
 For
 Functions
 Switch

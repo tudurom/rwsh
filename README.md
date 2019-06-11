@@ -39,7 +39,7 @@ See `todo/todo.txt`.
 - [x] Command substitution
 - [ ] Control flow structures
     - [x] If-else
-    - [ ] While
+    - [x] While
     - [ ] For
 	    - [ ] String globbing
     - [ ] Switch

@@ -1,0 +1,29 @@
+# simple while
+
+let a 1
+while ([ $a -lt 10 ]) {
+	echo $a
+	let a $(calc $a + 1)
+}
+
+# while with if
+
+let a 1
+while ([ $a -lt 10 ]) {
+	if ([ $a -eq 5 ]) echo found 5
+	else echo $a
+	let a $(calc $a + 1)
+}
+
+# nested while
+
+let outer_count 1
+while ([ $outer_count -lt 4 ]) {
+	echo "outer loop $outer_count"
+	let outer_count $(calc $outer_count + 1)
+	let inner_count 1
+	while ([ $inner_count -lt 4 ]) {
+		echo "    inner loop $inner_count"
+		let inner_count $(calc $inner_count + 1)
+	}
+}
