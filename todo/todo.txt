@@ -1,9 +1,6 @@
-(C) Substitution in SRE addresses
-(C) Substitution in SRE commands
 Arrays
 Maps
 For
 Functions
-Switch
-Match
+(B) Match
 Job control

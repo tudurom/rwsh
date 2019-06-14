@@ -1,4 +1,5 @@
 use super::*;
+use super::word::word_to_str;
 use crate::builtin;
 use crate::parser;
 use crate::shell::{Context, Process};
@@ -131,20 +132,6 @@ impl TaskImpl for Command {
             CommandType::Process => self.process_poll(ctx),
             CommandType::Builtin => self.builtin_poll(ctx),
         }
-    }
-}
-
-fn word_to_str(w: parser::Word) -> String {
-    match w.borrow().deref() {
-        parser::RawWord::String(s, _) => s.to_string(),
-        parser::RawWord::List(ws, _) => {
-            let mut s = String::new();
-            for w in ws {
-                s.push_str(&word_to_str(w.clone()));
-            }
-            s
-        }
-        _ => panic!(),
     }
 }
 

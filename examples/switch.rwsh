@@ -1,0 +1,14 @@
+switch lmao
+	/xd/ echo this is xd
+	/lm.*/ echo it starts with lm
+	/l.*/ echo it starts with l
+	// echo i don\'t know
+end
+
+switch lmao
+	/xd/ echo this is xd
+	/^lmao$/ echo literally lmao
+	/lm.*/ echo it starts with lm
+	/l.*/ echo it starts with l
+	// echo i don\'t know
+end

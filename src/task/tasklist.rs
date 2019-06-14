@@ -19,6 +19,9 @@ impl TaskList {
 impl TaskImpl for TaskList {
     fn poll(&mut self, ctx: &mut Context) -> Result<TaskStatus, String> {
         let mut ret = Ok(TaskStatus::Wait);
+        if self.children.len() == 0 {
+            return Ok(TaskStatus::Success(0));
+        }
         while self.current < self.children.len() {
             let child = &mut self.children[self.current];
 

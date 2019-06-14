@@ -14,6 +14,7 @@ use std::rc::Rc;
 pub struct Word {
     word: parser::Word,
     expand_tilde: bool,
+    is_pattern: bool,
 
     started: bool,
     fd: RawFd,
@@ -21,10 +22,11 @@ pub struct Word {
 }
 
 impl Word {
-    pub fn new(word: parser::Word, expand_tilde: bool) -> Self {
+    pub fn new(word: parser::Word, expand_tilde: bool, is_pattern: bool) -> Self {
         Word {
             word,
             expand_tilde,
+            is_pattern,
             started: false,
             fd: -1,
             process: None,
@@ -134,7 +136,11 @@ impl TaskImpl for Word {
                     val = Some(String::new());
                 }
                 //*self.word.borrow_mut()
-                to_replace = Some(parser::RawWord::String(val.unwrap(), false));
+                let mut s = val.unwrap();
+                if self.is_pattern {
+                    s = regex::escape(&s);
+                }
+                to_replace = Some(parser::RawWord::String(s, false));
             }
             parser::RawWord::Command(prog) => {
                 program = Some(prog.clone());
@@ -161,6 +167,9 @@ impl TaskImpl for Word {
                     s.pop();
                 }
 
+                if self.is_pattern {
+                    s = regex::escape(&s);
+                }
                 *self.word.borrow_mut() = parser::RawWord::String(s, false);
             }
 
@@ -168,5 +177,19 @@ impl TaskImpl for Word {
         }
         *self.word.borrow_mut() = to_replace.unwrap();
         Ok(TaskStatus::Success(0))
+    }
+}
+
+pub fn word_to_str(w: parser::Word) -> String {
+    match w.borrow().deref() {
+        parser::RawWord::String(s, _) => s.to_string(),
+        parser::RawWord::List(ws, _) | parser::RawWord::Pattern(ws) => {
+            let mut s = String::new();
+            for w in ws {
+                s.push_str(&word_to_str(w.clone()));
+            }
+            s
+        }
+        _ => panic!(),
     }
 }

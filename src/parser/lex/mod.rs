@@ -4,6 +4,7 @@ use super::sre::{parse_command, Command};
 use super::{escape, skip_whitespace};
 use super::{RawWord, Word};
 use crate::util::{BufReadChars, LineReader, ParseError};
+use bitflags::bitflags;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
@@ -16,9 +17,6 @@ pub enum TokenKind {
     Pizza(Command),
     Newline,
     /// A sequence of concatenated words.
-    ///
-    /// The first tuple element is the quote type (`"` or `'`),
-    /// or `\0` if none.
     Word(Word),
     /// Left brace (`{`)
     LBrace,
@@ -32,6 +30,11 @@ pub enum TokenKind {
     DoubleQuote,
     SingleQuote,
     Dollar,
+
+    /// The `end` keyword. Works only in [`END mode`](struct.LexMode.html#associatedconstant.END).
+    End,
+    /// The slash (`/`) keyword. Works only in [`SLASH mode`](struct.LexMode.html#associatedconstant.SLASH).
+    Slash,
 }
 
 impl TokenKind {
@@ -70,10 +73,20 @@ impl Token {
     }
 }
 
+bitflags! {
+    pub struct LexMode: u32 {
+        /// Enables the `end` keyword.
+        const END   = 0b00000001;
+        /// Enables the [`Slash` token](enum.TokenKind.html#variant.Slash).
+        const SLASH = 0b00000010;
+    }
+}
+
 /// Transforms text to a sequence of [`Token`s](enum.Token.html).
 #[derive(Clone)]
 pub struct Lexer<R: LineReader> {
     pub input: BufReadChars<R>,
+    pub mode: LexMode,
     pipe_follows: bool,
     errored: bool,
 
@@ -100,6 +113,8 @@ impl<R: LineReader> Lexer<R> {
             input,
             pipe_follows: false,
             errored: false,
+            mode: LexMode::empty(),
+
             peeked: None,
         }
     }
@@ -131,7 +146,7 @@ impl<R: LineReader> Lexer<R> {
                 } else if c == '\\' {
                     escaping = true;
                 } else {
-                    if !is_clear_string_char(c) {
+                    if !is_clear_string_char(c) || (self.mode.contains(LexMode::SLASH) && c == '/') {
                         break;
                     }
                     s.push(c);
@@ -243,16 +258,25 @@ impl<R: LineReader> Iterator for Lexer<R> {
             } else if c == '$' {
                 self.input.next();
                 Some(Ok(tok!(TokenKind::Dollar, 1, self.input)))
+            } else if c == '/' && self.mode.contains(LexMode::SLASH) {
+                self.input.next();
+                Some(Ok(tok!(TokenKind::Slash, 1, self.input)))
             } else if c.is_whitespace() {
                 let len = skip_whitespace(&mut self.input, false);
                 Some(Ok(tok!(TokenKind::Space, len, self.input)))
             } else {
                 match self.read_unquoted_word() {
-                    Ok(s) => Some(Ok(tok!(
-                        TokenKind::Word(RawWord::String(s, false).into()),
-                        s.len(),
-                        self.input
-                    ))),
+                    Ok(s) => {
+                        if self.mode.contains(LexMode::END) && s == "end" {
+                            Some(Ok(tok!(TokenKind::End, 3, self.input)))
+                        } else {
+                            Some(Ok(tok!(
+                                TokenKind::Word(RawWord::String(s, false).into()),
+                                s.len(),
+                                self.input
+                            )))
+                        }
+                    }
                     Err(e) => {
                         self.errored = true;
                         Some(Err(e))
@@ -330,6 +354,51 @@ mod tests {
             lex.next(); // skip space
         }
         assert_eq!(result.peek(), None);
+    }
+
+    #[test]
+    fn end_mode() {
+        use super::TokenKind::*;
+        use super::LexMode;
+        let mut lex = super::Lexer::new(new_dummy_buf("end end".lines()));
+        macro_rules! tok {
+            ($kind:expr) => {
+                super::Token {
+                    kind: $kind,
+                    len: 0,
+                    pos: (0, 0),
+                }
+            };
+        }
+        assert_eq!(lex.next(), Some(Ok(tok!(Word(
+                            super::RawWord::String("end".to_owned(), false).into())))));
+        lex.mode.insert(LexMode::END);
+        assert_eq!(lex.next(), Some(Ok(tok!(Space))));
+        assert_eq!(lex.next(), Some(Ok(tok!(End))));
+    }
+
+    #[test]
+    fn slash_mode() {
+        use super::TokenKind::*;
+        use super::LexMode;
+        let mut lex = super::Lexer::new(new_dummy_buf("/something//".lines()));
+        macro_rules! tok {
+            ($kind:expr) => {
+                super::Token {
+                    kind: $kind,
+                    len: 0,
+                    pos: (0, 0),
+                }
+            };
+        }
+        lex.mode.insert(LexMode::SLASH);
+        assert_eq!(lex.next(), Some(Ok(tok!(Slash))));
+        assert_eq!(lex.next(), Some(Ok(tok!(Word(
+                            super::RawWord::String("something".to_owned(), false).into())))));
+        assert_eq!(lex.next(), Some(Ok(tok!(Slash))));
+        lex.mode.remove(LexMode::SLASH);
+        assert_eq!(lex.next(), Some(Ok(tok!(Word(
+                            super::RawWord::String("/".to_owned(), false).into())))));
     }
 
     #[test]

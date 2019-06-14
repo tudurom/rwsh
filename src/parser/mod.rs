@@ -3,7 +3,7 @@ pub mod lex;
 pub mod misc;
 pub mod sre;
 
-use self::lex::{Lexer, Token};
+use self::lex::{Lexer, Token, LexMode};
 use crate::shell::pretty::*;
 use crate::util::{BufReadChars, LineReader, ParseError};
 use result::ResultOptionExt;
@@ -16,6 +16,7 @@ pub enum WordStringReadMode {
     SingleQuoted,
     DoubleQuoted,
     Parameter,
+    Pattern,
 }
 
 fn skip_whitespace<R: LineReader>(it: &mut BufReadChars<R>, skip_newlines: bool) -> usize {
@@ -100,6 +101,9 @@ pub enum RawWord {
 
     /// A command substitution
     Command(Program),
+
+    /// A regex pattern.
+    Pattern(Vec<Word>),
 }
 
 impl Into<Word> for RawWord {
@@ -117,6 +121,7 @@ pub fn deep_clone_word(w: &Word) -> Word {
         RawWord::Parameter(wp) => RawWord::Parameter(wp.clone()),
         RawWord::List(ws, b) => RawWord::List(ws.iter().map(deep_clone_word).collect(), *b),
         RawWord::Command(prog) => RawWord::Command(prog.clone()),
+        RawWord::Pattern(s) => RawWord::Pattern(s.clone()),
     }
     .into()
 }
@@ -149,6 +154,13 @@ impl PrettyPrint for RawWord {
             RawWord::Command(prog) => PrettyTree {
                 text: "word command".to_owned(),
                 children: vec![prog.pretty_print()],
+            },
+            RawWord::Pattern(words) => PrettyTree {
+                text: "word pattern".to_owned(),
+                children: words
+                    .iter()
+                    .map(|w| naked_word(w.clone()).pretty_print())
+                    .collect(),
             },
         }
     }
@@ -232,6 +244,10 @@ pub enum Command {
     ElseConstruct(Program),
     /// Like `IfConstruct`, first is the condition, second is the body.
     WhileConstruct(Program, Program),
+    /// A switch construct, runs code based on the first pattern that matches.
+    /// The first is the word to be matched, second is a list of patterns.
+    /// A pattern has a `Word` that is the pattern, and a program, that is the code.
+    SwitchConstruct(Word, Vec<(Word, Program)>),
 }
 
 impl PrettyPrint for Command {
@@ -286,6 +302,34 @@ impl PrettyPrint for Command {
                     PrettyTree {
                         text: "body - program".to_owned(),
                         children: body.pretty_print().children,
+                    },
+                ],
+            },
+            Command::SwitchConstruct(to_match, patterns) => PrettyTree {
+                text: "switch construct".to_owned(),
+                children: vec![
+                    PrettyTree {
+                        text: "word".to_owned(),
+                        children: vec![to_match.borrow().pretty_print()],
+                    },
+                    PrettyTree {
+                        text: "items".to_owned(),
+                        children: patterns
+                            .iter()
+                            .map(|(w, prog)| PrettyTree {
+                                text: "item".to_owned(),
+                                children: vec![
+                                    PrettyTree {
+                                        text: "patterns".to_owned(),
+                                        children: vec![w.borrow().pretty_print()],
+                                    },
+                                    PrettyTree {
+                                        text: "body".to_owned(),
+                                        children: prog.pretty_print().children,
+                                    },
+                                ],
+                            })
+                            .collect(),
                     },
                 ],
             },
@@ -469,6 +513,7 @@ impl<R: LineReader> Parser<R> {
             return Some(Err(e));
         }
         let lparen = lparen.unwrap().unwrap();
+        self.skip_space(false);
         let condition = match self.parse_program(false) {
             None => {
                 return Some(Err(
@@ -477,12 +522,11 @@ impl<R: LineReader> Parser<R> {
             }
             Some(Err(e)) => return Some(Err(e)),
             Some(Ok(p)) => {
-                if p.0.is_empty() {
-                    return Some(Err(lparen.new_error("expected if condition".to_owned())));
-                }
+                assert!(!p.0.is_empty());
                 p
             }
         };
+        self.skip_space(false);
         let rparen = self.next_tok(); // )
         if let Err(e) =
             check_condition_symbol(rparen.clone(), ')', lex::TokenKind::RParen, "if", if_tok)
@@ -490,6 +534,9 @@ impl<R: LineReader> Parser<R> {
             return Some(Err(e));
         }
         let rparen = rparen.unwrap().unwrap();
+        self.lexer.borrow_mut().ps2_exit();
+        self.lexer.borrow_mut().ps2_enter("then".to_owned());
+        self.skip_space(false);
         let body = match self.parse_program(false) {
             None => return Some(Err(rparen.new_error("expected if body, got EOF".to_owned()))),
             Some(Err(e)) => return Some(Err(e)),
@@ -502,6 +549,7 @@ impl<R: LineReader> Parser<R> {
     fn parse_else(&mut self) -> Option<Result<Command, ParseError>> {
         let else_tok = self.next_tok().unwrap().unwrap(); // else keyword
         self.lexer.borrow_mut().ps2_enter("else".to_owned());
+        self.skip_space(false);
 
         let body = match self.parse_program(false) {
             None => {
@@ -532,6 +580,7 @@ impl<R: LineReader> Parser<R> {
             return Some(Err(e));
         }
         let lparen = lparen.unwrap().unwrap();
+        self.skip_space(false);
         let condition = match self.parse_program(false) {
             None => {
                 return Some(Err(
@@ -546,7 +595,8 @@ impl<R: LineReader> Parser<R> {
                 p
             }
         };
-        let rparen = self.next_tok();
+        self.skip_space(false);
+        let rparen = self.next_tok(); // )
         if let Err(e) = check_condition_symbol(
             rparen.clone(),
             ')',
@@ -557,6 +607,9 @@ impl<R: LineReader> Parser<R> {
             return Some(Err(e));
         }
         let rparen = rparen.unwrap().unwrap();
+        self.lexer.borrow_mut().ps2_exit();
+        self.lexer.borrow_mut().ps2_enter("do".to_owned());
+        self.skip_space(false);
         let body = match self.parse_program(false) {
             None => {
                 return Some(Err(
@@ -568,6 +621,89 @@ impl<R: LineReader> Parser<R> {
         };
         self.lexer.borrow_mut().ps2_exit();
         Some(Ok(Command::WhileConstruct(condition, body)))
+    }
+
+    fn parse_switch(&mut self) -> Option<Result<Command, ParseError>> {
+        let switch_tok = self.next_tok().unwrap().unwrap(); // switch keyword
+        let mut v = Vec::new();
+        self.lexer.borrow_mut().ps2_enter("switch".to_owned());
+
+        self.skip_space(false);
+        let to_match = match self.parse_word_list() {
+            Some(Err(e)) => return Some(Err(e)),
+            Some(Ok(w)) => w,
+            None => return Some(Err(switch_tok.new_error("expected switch matchee, got EOF".to_owned()))),
+        };
+        loop {
+            self.lexer.borrow_mut().mode.insert(LexMode::END | LexMode::SLASH);
+            self.skip_space(false);
+            match self.peek() {
+                Some(Err(e)) => return Some(Err(e)),
+                Some(Ok(ref p)) if p.kind == lex::TokenKind::Slash => {},
+                Some(Ok(ref p)) if p.kind == lex::TokenKind::End => {
+                    self.next_tok();
+                    self.lexer.borrow_mut().mode.remove(LexMode::END | LexMode::SLASH);
+                    break;
+                },
+                Some(Ok(_)) => {
+                    return Some(Err(
+                        self.lexer.borrow().input.new_error("expected switch pattern".to_owned())
+                    ))
+                }
+                None => {
+                    return Some(Err(
+                        self.lexer.borrow().input.new_error("expected switch pattern, got EOF".to_owned())
+                    ))
+                }
+            }
+            self.lexer.borrow_mut().mode.remove(LexMode::END);
+            let pattern = match self.parse_switch_pattern() {
+                Err(e) => return Some(Err(e)),
+                Ok(p) => p,
+            };
+            self.skip_space(false);
+            self.lexer.borrow_mut().mode.remove(LexMode::SLASH);
+            let prog = match self.parse_program(false) {
+                None => return Some(Err(self.lexer.borrow().input.new_error("expected pattern body, got EOF".to_owned()))),
+                Some(Err(e)) => return Some(Err(e)),
+                Some(Ok(p)) => {
+                    assert!(!p.0.is_empty());
+                    p
+                },
+            };
+            v.push((pattern, prog));
+        }
+        self.lexer.borrow_mut().ps2_exit();
+        Some(Ok(Command::SwitchConstruct(to_match, v)))
+    }
+
+    fn parse_switch_pattern(&mut self) -> Result<Word, ParseError> {
+        self.next_tok(); // /
+        let mut v = Vec::new();
+        let mut closed = false;
+
+        while let Some(c) = self.peek_char() {
+            if c == '/' {
+                closed = true;
+                self.lexer.borrow_mut().input.next();
+                break;
+            }
+            let w = if c == '$' {
+                self.parse_word_dollar()?
+            } else {
+                self.parse_word_string(WordStringReadMode::Pattern)?.0
+            };
+            v.push(w);
+        }
+        if !closed {
+            Err(self
+                .lexer
+                .borrow_mut()
+                .input
+                .new_error("expected '/', got EOF".to_owned()))
+        } else {
+            Ok(RawWord::Pattern(v).into())
+        }
     }
 
     fn parse_command(&mut self) -> Option<Result<Command, ParseError>> {
@@ -632,6 +768,7 @@ impl<R: LineReader> Parser<R> {
                         "if" => return self.parse_if(),
                         "else" => return self.parse_else(),
                         "while" => return self.parse_while(),
+                        "switch" => return self.parse_switch(),
                         _ => {}
                     }
                 }
@@ -776,7 +913,22 @@ impl<R: LineReader> Parser<R> {
                 s.push(escape(c));
                 escaping = false;
             } else if c == '\\' {
-                escaping = true;
+                if let WordStringReadMode::Pattern = mode {
+                    input.next();
+                    match input.peek() {
+                        Some('\\') => s.push_str("\\\\"),
+                        Some('/') => s.push('/'),
+                        Some(&x) => {
+                            s.push('\\');
+                            s.push(x);
+                        }
+                        None => {}
+                    }
+                    input.next();
+                    continue;
+                } else {
+                    escaping = true;
+                }
             } else {
                 match mode {
                     WordStringReadMode::Unqoted => {
@@ -797,6 +949,11 @@ impl<R: LineReader> Parser<R> {
                     }
                     WordStringReadMode::Parameter => {
                         if !lex::is_parameter_char(c) {
+                            break;
+                        }
+                    }
+                    WordStringReadMode::Pattern => {
+                        if c == '/' {
                             break;
                         }
                     }
