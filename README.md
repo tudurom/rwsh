@@ -1,6 +1,7 @@
 # rwsh
 
 [![builds.sr.ht status](https://builds.sr.ht/~tudor/rwsh.svg)](https://builds.sr.ht/~tudor/rwsh?)
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Ftudurom%2Frwsh.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Ftudurom%2Frwsh?ref=badge_shield)
 
 *(Better name ideas pending)*
 
@@ -52,3 +53,7 @@ See `todo/todo.txt`.
     - [x] `eval`
 	- [x] `calc`
 	- ...
+
+
+## License
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Ftudurom%2Frwsh.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Ftudurom%2Frwsh?ref=badge_large)
