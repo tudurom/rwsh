@@ -6,6 +6,10 @@ packages:
 sources:
   - https://git.sr.ht/~tudor/rwsh
 tasks:
+  - check_license: |
+      for f in $(find . -iname '*.rs'); do
+        grep "GNU General Public License" "$f" > /dev/null || exit 1
+      done
   - setup: |
       rustup install stable
       rustup default stable
