@@ -2,5 +2,6 @@ Arrays
 Maps
 For
 Functions
-(B) Match
+(A) Match
 Job control
+(B) || and && operators

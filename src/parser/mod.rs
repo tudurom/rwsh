@@ -458,6 +458,7 @@ impl<R: LineReader> Parser<R> {
             Some(Ok(t)) => {
                 self.lexer.borrow_mut().ps2_enter("pipe".to_owned());
                 let mut v = vec![t];
+                self.skip_space(true);
                 match self.peek() {
                     Some(Ok(lex::Token {
                         kind: lex::TokenKind::Newline,
