@@ -18,87 +18,62 @@
 use super::word::word_to_str;
 use super::*;
 use crate::parser;
-use crate::shell::Context;
 use regex::RegexSet;
+use std::io::{stdin, BufReader, Stdin};
 
-enum ItemIndex {
-    Unknown,
-    Index(usize),
-    None,
-}
-
-impl ItemIndex {
-    fn index(&self) -> usize {
-        if let ItemIndex::Index(i) = self {
-            *i
-        } else {
-            panic!()
-        }
-    }
-}
-
-pub struct Switch {
-    ast: (parser::Word, Vec<(parser::Word, parser::Program)>),
-    to_match: String,
+pub struct Match {
+    ast: Vec<(parser::Word, parser::Program)>,
     items: Vec<Task>,
     patterns: Vec<String>,
+    reader: Option<BufReader<Stdin>>,
     regex_set: Option<RegexSet>,
 
     initialized: bool,
-    index: ItemIndex,
 }
 
-impl Switch {
-    pub fn new(condition: parser::Word, items: Vec<(parser::Word, parser::Program)>) -> Self {
-        Switch {
-            ast: (condition, items),
-            to_match: String::new(),
+impl Match {
+    pub fn new(items: Vec<(parser::Word, parser::Program)>) -> Self {
+        Match {
+            ast: items,
             items: Vec::new(),
             patterns: Vec::new(),
             initialized: false,
-            index: ItemIndex::Unknown,
+            reader: None,
             regex_set: None,
         }
     }
 
     fn initialize(&mut self) -> Result<(), String> {
-        self.to_match = word_to_str(self.ast.0.clone());
+        for i in &self.ast {
+            /*
+            self.items.push(SwitchItem {
+                pattern: word_to_str(i.0.clone()),
+                body: Task::new_from_command_lists((i.1).0.clone()),
+            });
+            */
+            self.items
+                .push(Task::new_from_command_lists((i.1).0.clone()));
+        }
         self.items.extend(
             self.ast
-                .1
                 .iter()
                 .map(|(_, prog)| Task::new_from_command_lists(prog.0.clone())),
         );
         self.patterns
-            .extend(self.ast.1.iter().map(|(p, _)| word_to_str(p.clone())));
+            .extend(self.ast.iter().map(|(p, _)| word_to_str(p.clone())));
         self.regex_set =
             Some(RegexSet::new(self.patterns.iter()).map_err(|e| format!("regex error: {}", e))?);
+        self.reader = Some(BufReader::new(stdin()));
         self.initialized = true;
         Ok(())
     }
 }
 
-impl TaskImpl for Switch {
-    fn poll(&mut self, ctx: &mut Context) -> Result<TaskStatus, String> {
+impl TaskImpl for Match {
+    fn poll(&mut self, _ctx: &mut Context) -> Result<TaskStatus, String> {
         if !self.initialized {
             self.initialize()?;
         }
-        if let ItemIndex::Unknown = self.index {
-            let matches = self.regex_set.as_ref().unwrap().matches(&self.to_match);
-            for i in 0..self.items.len() {
-                if matches.matched(i) {
-                    self.index = ItemIndex::Index(i);
-                    break;
-                }
-            }
-            if let ItemIndex::Unknown = self.index {
-                self.index = ItemIndex::None;
-            }
-        }
-        if let ItemIndex::None = self.index {
-            Ok(TaskStatus::Success(0))
-        } else {
-            self.items[self.index.index()].poll(ctx)
-        }
+        unimplemented!()
     }
 }

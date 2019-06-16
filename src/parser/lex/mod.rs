@@ -93,9 +93,9 @@ impl Token {
 bitflags! {
     pub struct LexMode: u32 {
         /// Enables the `end` keyword.
-        const END   = 0b00000001;
+        const END   = 0b0000_0001;
         /// Enables the [`Slash` token](enum.TokenKind.html#variant.Slash).
-        const SLASH = 0b00000010;
+        const SLASH = 0b0000_0010;
     }
 }
 
@@ -163,7 +163,8 @@ impl<R: LineReader> Lexer<R> {
                 } else if c == '\\' {
                     escaping = true;
                 } else {
-                    if !is_clear_string_char(c) || (self.mode.contains(LexMode::SLASH) && c == '/') {
+                    if !is_clear_string_char(c) || (self.mode.contains(LexMode::SLASH) && c == '/')
+                    {
                         break;
                     }
                     s.push(c);
@@ -375,8 +376,8 @@ mod tests {
 
     #[test]
     fn end_mode() {
-        use super::TokenKind::*;
         use super::LexMode;
+        use super::TokenKind::*;
         let mut lex = super::Lexer::new(new_dummy_buf("end end".lines()));
         macro_rules! tok {
             ($kind:expr) => {
@@ -387,8 +388,12 @@ mod tests {
                 }
             };
         }
-        assert_eq!(lex.next(), Some(Ok(tok!(Word(
-                            super::RawWord::String("end".to_owned(), false).into())))));
+        assert_eq!(
+            lex.next(),
+            Some(Ok(tok!(Word(
+                super::RawWord::String("end".to_owned(), false).into()
+            ))))
+        );
         lex.mode.insert(LexMode::END);
         assert_eq!(lex.next(), Some(Ok(tok!(Space))));
         assert_eq!(lex.next(), Some(Ok(tok!(End))));
@@ -396,8 +401,8 @@ mod tests {
 
     #[test]
     fn slash_mode() {
-        use super::TokenKind::*;
         use super::LexMode;
+        use super::TokenKind::*;
         let mut lex = super::Lexer::new(new_dummy_buf("/something//".lines()));
         macro_rules! tok {
             ($kind:expr) => {
@@ -410,12 +415,20 @@ mod tests {
         }
         lex.mode.insert(LexMode::SLASH);
         assert_eq!(lex.next(), Some(Ok(tok!(Slash))));
-        assert_eq!(lex.next(), Some(Ok(tok!(Word(
-                            super::RawWord::String("something".to_owned(), false).into())))));
+        assert_eq!(
+            lex.next(),
+            Some(Ok(tok!(Word(
+                super::RawWord::String("something".to_owned(), false).into()
+            ))))
+        );
         assert_eq!(lex.next(), Some(Ok(tok!(Slash))));
         lex.mode.remove(LexMode::SLASH);
-        assert_eq!(lex.next(), Some(Ok(tok!(Word(
-                            super::RawWord::String("/".to_owned(), false).into())))));
+        assert_eq!(
+            lex.next(),
+            Some(Ok(tok!(Word(
+                super::RawWord::String("/".to_owned(), false).into()
+            ))))
+        );
     }
 
     #[test]

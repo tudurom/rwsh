@@ -15,8 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with RWSH. If not, see <http://www.gnu.org/licenses/>.
  */
-use super::*;
 use super::word::word_to_str;
+use super::*;
 use crate::builtin;
 use crate::parser;
 use crate::shell::{Context, Process};

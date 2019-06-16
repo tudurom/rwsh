@@ -20,7 +20,7 @@ pub mod lex;
 pub mod misc;
 pub mod sre;
 
-use self::lex::{Lexer, Token, LexMode};
+use self::lex::{LexMode, Lexer, Token};
 use crate::shell::pretty::*;
 use crate::util::{BufReadChars, LineReader, ParseError};
 use result::ResultOptionExt;
@@ -265,6 +265,9 @@ pub enum Command {
     /// The first is the word to be matched, second is a list of patterns.
     /// A pattern has a `Word` that is the pattern, and a program, that is the code.
     SwitchConstruct(Word, Vec<(Word, Program)>),
+    /// A match construct. It runs code *for each match* of *every pattern* in the text.
+    /// The text is given by `stdin`.
+    MatchConstruct(Vec<(Word, Program)>),
 }
 
 impl PrettyPrint for Command {
@@ -337,7 +340,7 @@ impl PrettyPrint for Command {
                                 text: "item".to_owned(),
                                 children: vec![
                                     PrettyTree {
-                                        text: "patterns".to_owned(),
+                                        text: "pattern".to_owned(),
                                         children: vec![w.borrow().pretty_print()],
                                     },
                                     PrettyTree {
@@ -349,6 +352,25 @@ impl PrettyPrint for Command {
                             .collect(),
                     },
                 ],
+            },
+            Command::MatchConstruct(patterns) => PrettyTree {
+                text: "match construct".to_owned(),
+                children: patterns
+                    .iter()
+                    .map(|(w, prog)| PrettyTree {
+                        text: "item".to_owned(),
+                        children: vec![
+                            PrettyTree {
+                                text: "pattern".to_owned(),
+                                children: vec![w.borrow().pretty_print()],
+                            },
+                            PrettyTree {
+                                text: "body".to_owned(),
+                                children: prog.pretty_print().children,
+                            },
+                        ],
+                    })
+                    .collect(),
             },
         }
     }
@@ -650,28 +672,42 @@ impl<R: LineReader> Parser<R> {
         let to_match = match self.parse_word_list() {
             Some(Err(e)) => return Some(Err(e)),
             Some(Ok(w)) => w,
-            None => return Some(Err(switch_tok.new_error("expected switch matchee, got EOF".to_owned()))),
+            None => {
+                return Some(Err(
+                    switch_tok.new_error("expected switch matchee, got EOF".to_owned())
+                ))
+            }
         };
         loop {
-            self.lexer.borrow_mut().mode.insert(LexMode::END | LexMode::SLASH);
+            self.lexer
+                .borrow_mut()
+                .mode
+                .insert(LexMode::END | LexMode::SLASH);
             self.skip_space(false);
             match self.peek() {
                 Some(Err(e)) => return Some(Err(e)),
-                Some(Ok(ref p)) if p.kind == lex::TokenKind::Slash => {},
+                Some(Ok(ref p)) if p.kind == lex::TokenKind::Slash => {}
                 Some(Ok(ref p)) if p.kind == lex::TokenKind::End => {
                     self.next_tok();
-                    self.lexer.borrow_mut().mode.remove(LexMode::END | LexMode::SLASH);
+                    self.lexer
+                        .borrow_mut()
+                        .mode
+                        .remove(LexMode::END | LexMode::SLASH);
                     break;
-                },
+                }
                 Some(Ok(_)) => {
-                    return Some(Err(
-                        self.lexer.borrow().input.new_error("expected switch pattern".to_owned())
-                    ))
+                    return Some(Err(self
+                        .lexer
+                        .borrow()
+                        .input
+                        .new_error("expected switch pattern".to_owned())))
                 }
                 None => {
-                    return Some(Err(
-                        self.lexer.borrow().input.new_error("expected switch pattern, got EOF".to_owned())
-                    ))
+                    return Some(Err(self
+                        .lexer
+                        .borrow()
+                        .input
+                        .new_error("expected switch pattern, got EOF".to_owned())))
                 }
             }
             self.lexer.borrow_mut().mode.remove(LexMode::END);
@@ -682,12 +718,18 @@ impl<R: LineReader> Parser<R> {
             self.skip_space(false);
             self.lexer.borrow_mut().mode.remove(LexMode::SLASH);
             let prog = match self.parse_program(false) {
-                None => return Some(Err(self.lexer.borrow().input.new_error("expected pattern body, got EOF".to_owned()))),
+                None => {
+                    return Some(Err(self
+                        .lexer
+                        .borrow()
+                        .input
+                        .new_error("expected pattern body, got EOF".to_owned())))
+                }
                 Some(Err(e)) => return Some(Err(e)),
                 Some(Ok(p)) => {
                     assert!(!p.0.is_empty());
                     p
-                },
+                }
             };
             v.push((pattern, prog));
         }
@@ -724,6 +766,69 @@ impl<R: LineReader> Parser<R> {
         }
     }
 
+    fn parse_match(&mut self) -> Option<Result<Command, ParseError>> {
+        self.next_tok().unwrap().unwrap(); // match keyword
+        let mut v = Vec::new();
+        self.lexer.borrow_mut().ps2_enter("match".to_owned());
+
+        loop {
+            self.lexer
+                .borrow_mut()
+                .mode
+                .insert(LexMode::END | LexMode::SLASH);
+            self.skip_space(false);
+            match self.peek() {
+                Some(Err(e)) => return Some(Err(e)),
+                Some(Ok(ref p)) if p.kind == lex::TokenKind::Slash => {}
+                Some(Ok(ref p)) if p.kind == lex::TokenKind::End => {
+                    self.next_tok();
+                    self.lexer
+                        .borrow_mut()
+                        .mode
+                        .remove(LexMode::END | LexMode::SLASH);
+                    break;
+                }
+                Some(Ok(_)) => {
+                    return Some(Err(self
+                        .lexer
+                        .borrow()
+                        .input
+                        .new_error("expected match pattern".to_owned())))
+                }
+                None => {
+                    return Some(Err(self
+                        .lexer
+                        .borrow()
+                        .input
+                        .new_error("expected match pattern, got EOF".to_owned())))
+                }
+            }
+            self.lexer.borrow_mut().mode.remove(LexMode::END);
+            let pattern = match self.parse_switch_pattern() {
+                Err(e) => return Some(Err(e)),
+                Ok(p) => p,
+            };
+            self.skip_space(false);
+            self.lexer.borrow_mut().mode.remove(LexMode::SLASH);
+            let prog = match self.parse_program(false) {
+                None => {
+                    return Some(Err(self
+                        .lexer
+                        .borrow()
+                        .input
+                        .new_error("expected pattern body, got EOF".to_owned())))
+                }
+                Some(Err(e)) => return Some(Err(e)),
+                Some(Ok(p)) => {
+                    assert!(!p.0.is_empty());
+                    p
+                }
+            };
+            v.push((pattern, prog));
+        }
+        self.lexer.borrow_mut().ps2_exit();
+        Some(Ok(Command::MatchConstruct(v)))
+    }
     fn parse_command(&mut self) -> Option<Result<Command, ParseError>> {
         self.skip_space(false);
         match self.peek() {
@@ -787,6 +892,7 @@ impl<R: LineReader> Parser<R> {
                         "else" => return self.parse_else(),
                         "while" => return self.parse_while(),
                         "switch" => return self.parse_switch(),
+                        "match" => return self.parse_match(),
                         _ => {}
                     }
                 }

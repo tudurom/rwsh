@@ -17,6 +17,7 @@
  */
 mod command;
 mod if_construct;
+mod r#match;
 mod pipeline;
 mod sresequence;
 mod switch;
@@ -26,6 +27,7 @@ mod word;
 pub use command::Command;
 pub use if_construct::{ElseConstruct, IfConstruct};
 pub use pipeline::Pipeline;
+pub use r#match::Match;
 pub use sresequence::SRESequence;
 pub use switch::Switch;
 pub use tasklist::TaskList;
@@ -107,11 +109,8 @@ impl Task {
         } else if let parser::RawWord::Pattern(children) = word.borrow().deref() {
             let mut tl = TaskList::new();
             for child in children {
-                tl.children.push(Self::new_from_word(
-                        child.clone(),
-                        expand_tilde,
-                        true,
-                ));
+                tl.children
+                    .push(Self::new_from_word(child.clone(), expand_tilde, true));
             }
             return Task::new(Box::new(tl));
         }
@@ -123,9 +122,11 @@ impl Task {
     pub fn new_from_simple_command(c: parser::SimpleCommand) -> Self {
         let mut tl = TaskList::new();
         let sc = c.with_deep_copied_word();
-        tl.children.push(Self::new_from_word(sc.0.clone(), true, false));
+        tl.children
+            .push(Self::new_from_word(sc.0.clone(), true, false));
         for arg in &sc.1 {
-            tl.children.push(Self::new_from_word(arg.clone(), true, false));
+            tl.children
+                .push(Self::new_from_word(arg.clone(), true, false));
         }
         tl.children.push(Task::new(Box::new(Command::new(sc))));
 
@@ -153,14 +154,30 @@ impl Task {
         Task::new(Box::new(WhileConstruct::new(condition, body)))
     }
 
-    pub fn new_from_switch(to_match: parser::Word, items: Vec<(parser::Word, parser::Program)>) -> Self {
+    pub fn new_from_switch(
+        to_match: parser::Word,
+        items: Vec<(parser::Word, parser::Program)>,
+    ) -> Self {
         let mut tl = TaskList::new();
-        tl.children.push(Self::new_from_word(to_match.clone(), false, true));
+        tl.children
+            .push(Self::new_from_word(to_match.clone(), false, true));
         for item in &items {
-            tl.children.push(Self::new_from_word(item.0.clone(), false, true));
+            tl.children
+                .push(Self::new_from_word(item.0.clone(), false, true));
         }
-        tl.children.push(Task::new(Box::new(Switch::new(to_match, items))));
+        tl.children
+            .push(Task::new(Box::new(Switch::new(to_match, items))));
 
+        Task::new(Box::new(tl))
+    }
+
+    pub fn new_from_match(items: Vec<(parser::Word, parser::Program)>) -> Self {
+        let mut tl = TaskList::new();
+        for item in &items {
+            tl.children
+                .push(Self::new_from_word(item.0.clone(), false, true));
+        }
+        tl.children.push(Task::new(Box::new(Match::new(items))));
         Task::new(Box::new(tl))
     }
 
@@ -177,7 +194,10 @@ impl Task {
                 parser::Command::WhileConstruct(condition, body) => {
                     Self::new_from_while(condition, body)
                 }
-                parser::Command::SwitchConstruct(to_match, items) => Self::new_from_switch(to_match, items),
+                parser::Command::SwitchConstruct(to_match, items) => {
+                    Self::new_from_switch(to_match, items)
+                }
+                parser::Command::MatchConstruct(items) => Self::new_from_match(items),
             });
         }
 
