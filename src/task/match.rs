@@ -18,17 +18,26 @@
 use super::word::word_to_str;
 use super::*;
 use crate::parser;
-use regex::RegexSet;
-use std::io::{stdin, BufReader, Stdin};
+use regex::Regex;
+use std::io::{stdin, BufRead, BufReader, ErrorKind, Stdin};
+
+enum MatchState {
+    Searching,
+    Executing(usize),
+    Finished,
+}
 
 pub struct Match {
     ast: Vec<(parser::Word, parser::Program)>,
     items: Vec<Task>,
     patterns: Vec<String>,
     reader: Option<BufReader<Stdin>>,
-    regex_set: Option<RegexSet>,
+    regexes: Vec<Regex>,
 
     initialized: bool,
+    state: MatchState,
+    buf: Vec<u8>,
+    last_body_status: Result<TaskStatus, String>,
 }
 
 impl Match {
@@ -37,23 +46,17 @@ impl Match {
             ast: items,
             items: Vec::new(),
             patterns: Vec::new(),
-            initialized: false,
             reader: None,
-            regex_set: None,
+            regexes: Vec::new(),
+
+            initialized: false,
+            state: MatchState::Searching,
+            buf: Vec::new(),
+            last_body_status: Ok(TaskStatus::Wait),
         }
     }
 
     fn initialize(&mut self) -> Result<(), String> {
-        for i in &self.ast {
-            /*
-            self.items.push(SwitchItem {
-                pattern: word_to_str(i.0.clone()),
-                body: Task::new_from_command_lists((i.1).0.clone()),
-            });
-            */
-            self.items
-                .push(Task::new_from_command_lists((i.1).0.clone()));
-        }
         self.items.extend(
             self.ast
                 .iter()
@@ -61,8 +64,8 @@ impl Match {
         );
         self.patterns
             .extend(self.ast.iter().map(|(p, _)| word_to_str(p.clone())));
-        self.regex_set =
-            Some(RegexSet::new(self.patterns.iter()).map_err(|e| format!("regex error: {}", e))?);
+        self.regexes
+            .extend(self.patterns.iter().map(|p| Regex::new(p).unwrap()));
         self.reader = Some(BufReader::new(stdin()));
         self.initialized = true;
         Ok(())
@@ -70,10 +73,61 @@ impl Match {
 }
 
 impl TaskImpl for Match {
-    fn poll(&mut self, _ctx: &mut Context) -> Result<TaskStatus, String> {
+    fn poll(&mut self, ctx: &mut Context) -> Result<TaskStatus, String> {
         if !self.initialized {
             self.initialize()?;
         }
-        unimplemented!()
+        while ctx.state.exit == -1 {
+            if let MatchState::Searching = self.state {
+                let stdin = stdin();
+                let mut handle = stdin.lock();
+                loop {
+                    let available = match handle.fill_buf() {
+                        Ok(n) => n,
+                        Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+                        Err(e) => return Err(format!("{}", e)),
+                    };
+                    if available.is_empty() {
+                        self.state = MatchState::Finished;
+                        break;
+                    }
+
+                    let init_len = self.buf.len();
+                    self.buf.extend_from_slice(available);
+                    let s = String::from_utf8_lossy(self.buf.as_slice());
+                    let mut found = false;
+                    let mut used = available.len();
+                    for (i, r) in self.regexes.iter().enumerate() {
+                        if let Some(m) = r.find(&s) {
+                            self.state = MatchState::Executing(i);
+                            found = true;
+                            used = m.end() - init_len;
+                            break;
+                        }
+                    }
+                    handle.consume(used);
+                    if found {
+                        self.buf.clear();
+                        break;
+                    }
+                }
+            }
+
+            match &self.state {
+                MatchState::Executing(i) => {
+                    let body_status = self.items[*i].poll(ctx)?;
+                    if let TaskStatus::Wait = body_status {
+                        return Ok(TaskStatus::Wait)
+                    } else {
+                        self.last_body_status = Ok(body_status);
+                        self.items[*i] = Task::new_from_command_lists(self.ast[*i].1.clone().0);
+                        self.state = MatchState::Searching;
+                    }
+                }
+                MatchState::Finished => return self.last_body_status.clone(),
+                _ => {}
+            }
+        }
+        Ok(TaskStatus::Success(ctx.state.exit))
     }
 }

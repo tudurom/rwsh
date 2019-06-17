@@ -85,14 +85,9 @@ impl TaskImpl for Switch {
         }
         if let ItemIndex::Unknown = self.index {
             let matches = self.regex_set.as_ref().unwrap().matches(&self.to_match);
-            for i in 0..self.items.len() {
-                if matches.matched(i) {
-                    self.index = ItemIndex::Index(i);
-                    break;
-                }
-            }
-            if let ItemIndex::Unknown = self.index {
-                self.index = ItemIndex::None;
+            match matches.into_iter().next() {
+                None => self.index = ItemIndex::None,
+                Some(i) => self.index = ItemIndex::Index(i),
             }
         }
         if let ItemIndex::None = self.index {
