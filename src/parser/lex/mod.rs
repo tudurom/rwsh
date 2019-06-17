@@ -17,7 +17,7 @@
  */
 pub mod sre;
 
-use super::sre::{parse_command, Command};
+use super::sre::{parse_command as parse_sre_command, Command};
 use super::{escape, skip_whitespace};
 use super::{RawWord, Word};
 use crate::util::{BufReadChars, LineReader, ParseError};
@@ -185,6 +185,23 @@ impl<R: LineReader> Lexer<R> {
                 .new_error(format!("unexpected character '{}'", c)))
         }
     }
+
+    fn read_sre(&mut self) -> Option<Result<Token, ParseError>> {
+        self.input.ps2_enter("pizza".to_owned());
+        let r = match parse_sre_command(&mut self.input, false) {
+            Ok(Some(sre)) => {
+                self.pipe_follows = true;
+                Some(Ok(tok!(TokenKind::Pizza(sre), 1, self.input)))
+            }
+            Ok(None) => panic!(),
+            Err(e) => {
+                self.errored = true;
+                Some(Err(e))
+            }
+        };
+        self.input.ps2_exit();
+        r
+    }
 }
 
 impl<R: LineReader> Iterator for Lexer<R> {
@@ -232,23 +249,13 @@ impl<R: LineReader> Iterator for Lexer<R> {
                 self.input.next();
                 if let Some('>') = self.input.peek() {
                     self.input.next();
-                    self.input.ps2_enter("pizza".to_owned());
-                    let r = match parse_command(&mut self.input, false) {
-                        Ok(Some(sre)) => {
-                            self.pipe_follows = true;
-                            Some(Ok(tok!(TokenKind::Pizza(sre), 1, self.input)))
-                        }
-                        Ok(None) => panic!(),
-                        Err(e) => {
-                            self.errored = true;
-                            Some(Err(e))
-                        }
-                    };
-                    self.input.ps2_exit();
-                    r
+                    self.read_sre()
                 } else {
                     Some(Ok(tok!(TokenKind::Pipe, 1, self.input)))
                 }
+            } else if c == '🍕' {
+                self.input.next();
+                self.read_sre()
             } else if c == '\n' {
                 self.input.next();
                 Some(Ok(tok!(TokenKind::Newline, 0, self.input)))

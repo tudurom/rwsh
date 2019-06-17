@@ -22,7 +22,6 @@ use regex::Regex;
 use std::io::{stdin, BufRead, BufReader, ErrorKind, Stdin};
 
 struct MatchItem {
-    pattern: String,
     regex: Regex,
     offset: usize,
     task: Task,
@@ -65,7 +64,6 @@ impl Match {
                 let task = Task::new_from_command_lists(prog.0.clone());
                 let regex = Regex::new(&pattern).unwrap();
                 MatchItem {
-                    pattern,
                     regex,
                     offset: 0,
                     task,
