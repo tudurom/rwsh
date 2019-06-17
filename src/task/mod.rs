@@ -76,7 +76,8 @@ impl Task {
                 Err(e) => {
                     if let Some(nix::errno::Errno::ECHILD) = e.as_errno() {
                         ctx.state.last_status = 0;
-                        return Ok(0);
+                        //return Ok(0);
+                        continue;
                     } else {
                         return Err(Box::new(e));
                     }

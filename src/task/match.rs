@@ -21,21 +21,22 @@ use crate::parser;
 use regex::Regex;
 use std::io::{stdin, BufRead, BufReader, ErrorKind, Stdin};
 
-enum MatchState {
-    Searching,
-    Executing(usize),
-    Finished,
+struct MatchItem {
+    pattern: String,
+    regex: Regex,
+    offset: usize,
+    task: Task,
+    to_exec: usize,
+    prog: parser::Program,
 }
 
 pub struct Match {
     ast: Vec<(parser::Word, parser::Program)>,
-    items: Vec<Task>,
-    patterns: Vec<String>,
     reader: Option<BufReader<Stdin>>,
-    regexes: Vec<Regex>,
+    items: Vec<MatchItem>,
 
     initialized: bool,
-    state: MatchState,
+    finished: bool,
     buf: Vec<u8>,
     last_body_status: Result<TaskStatus, String>,
 }
@@ -45,27 +46,34 @@ impl Match {
         Match {
             ast: items,
             items: Vec::new(),
-            patterns: Vec::new(),
             reader: None,
-            regexes: Vec::new(),
 
             initialized: false,
-            state: MatchState::Searching,
+            finished: false,
             buf: Vec::new(),
             last_body_status: Ok(TaskStatus::Wait),
         }
     }
 
     fn initialize(&mut self) -> Result<(), String> {
-        self.items.extend(
-            self.ast
-                .iter()
-                .map(|(_, prog)| Task::new_from_command_lists(prog.0.clone())),
-        );
-        self.patterns
-            .extend(self.ast.iter().map(|(p, _)| word_to_str(p.clone())));
-        self.regexes
-            .extend(self.patterns.iter().map(|p| Regex::new(p).unwrap()));
+        self.items = self
+            .ast
+            .iter()
+            .enumerate()
+            .map(|(i, (pattern, prog))| {
+                let pattern = word_to_str(pattern.clone());
+                let task = Task::new_from_command_lists(prog.0.clone());
+                let regex = Regex::new(&pattern).unwrap();
+                MatchItem {
+                    pattern,
+                    regex,
+                    offset: 0,
+                    task,
+                    to_exec: 0,
+                    prog: self.ast[i].1.clone(),
+                }
+            })
+            .collect();
         self.reader = Some(BufReader::new(stdin()));
         self.initialized = true;
         Ok(())
@@ -77,57 +85,50 @@ impl TaskImpl for Match {
         if !self.initialized {
             self.initialize()?;
         }
+        let stdin = stdin();
         while ctx.state.exit == -1 {
-            if let MatchState::Searching = self.state {
-                let stdin = stdin();
-                let mut handle = stdin.lock();
-                loop {
+            match self.items.iter_mut().find(|item| item.to_exec > 0) {
+                None => {
+                    if self.finished {
+                        return self.last_body_status.clone();
+                    }
+                    let mut handle = stdin.lock();
                     let available = match handle.fill_buf() {
                         Ok(n) => n,
                         Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
                         Err(e) => return Err(format!("{}", e)),
                     };
                     if available.is_empty() {
-                        self.state = MatchState::Finished;
-                        break;
+                        self.finished = true;
+                        continue;
                     }
-
-                    let init_len = self.buf.len();
+                    let len = available.len();
                     self.buf.extend_from_slice(available);
-                    let s = String::from_utf8_lossy(self.buf.as_slice());
-                    let mut found = false;
-                    let mut used = available.len();
-                    for (i, r) in self.regexes.iter().enumerate() {
-                        if let Some(m) = r.find(&s) {
-                            self.state = MatchState::Executing(i);
-                            found = true;
-                            used = m.end() - init_len;
-                            break;
+                    for item in self.items.iter_mut() {
+                        let s = String::from_utf8_lossy(&self.buf[item.offset..]);
+                        let mut to_add = 0;
+                        for m in item.regex.find_iter(&s) {
+                            item.to_exec += 1;
+                            to_add = m.end();
                         }
+                        item.offset += to_add;
                     }
-                    handle.consume(used);
-                    if found {
-                        self.buf.clear();
-                        break;
-                    }
+                    handle.consume(len);
+                    return Ok(TaskStatus::Wait);
                 }
-            }
-
-            match &self.state {
-                MatchState::Executing(i) => {
-                    let body_status = self.items[*i].poll(ctx)?;
+                Some(item) => {
+                    let body_status = item.task.poll(ctx)?;
                     if let TaskStatus::Wait = body_status {
-                        return Ok(TaskStatus::Wait)
+                        return Ok(TaskStatus::Wait);
                     } else {
                         self.last_body_status = Ok(body_status);
-                        self.items[*i] = Task::new_from_command_lists(self.ast[*i].1.clone().0);
-                        self.state = MatchState::Searching;
+                        item.task = Task::new_from_command_lists(item.prog.0.clone());
+                        item.to_exec -= 1;
                     }
                 }
-                MatchState::Finished => return self.last_body_status.clone(),
-                _ => {}
             }
         }
+
         Ok(TaskStatus::Success(ctx.state.exit))
     }
 }

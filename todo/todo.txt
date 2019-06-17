@@ -2,6 +2,6 @@ Arrays
 Maps
 For
 Functions
-(A) Match
 Job control
-(B) || and && operators
+(C) || and && operators
+(A) Fix pipes
