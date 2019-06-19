@@ -182,24 +182,31 @@ impl Task {
         Task::new(Box::new(tl))
     }
 
+    pub fn new_from_command(pi: parser::Command) -> Self {
+        match pi {
+            parser::Command::SimpleCommand(c) => Self::new_from_simple_command(c),
+            parser::Command::SREProgram(seq) => Self::new_from_sre_sequence(seq),
+            parser::Command::BraceGroup(arr) => Self::new_from_command_lists(arr),
+            parser::Command::IfConstruct(condition, body) => Self::new_from_if(condition, body),
+            parser::Command::ElseConstruct(body) => Self::new_from_else(body),
+            parser::Command::WhileConstruct(condition, body) => {
+                Self::new_from_while(condition, body)
+            }
+            parser::Command::SwitchConstruct(to_match, items) => {
+                Self::new_from_switch(to_match, items)
+            }
+            parser::Command::MatchConstruct(items) => Self::new_from_match(items),
+        }
+    }
+
     pub fn new_from_pipeline(p: parser::Pipeline) -> Self {
+        if p.0.len() == 1 {
+            return Self::new_from_command(p.0[0].clone());
+        }
         let mut tp = Pipeline::new();
 
         for pi in p.0 {
-            tp.children.push(match pi {
-                parser::Command::SimpleCommand(c) => Self::new_from_simple_command(c),
-                parser::Command::SREProgram(seq) => Self::new_from_sre_sequence(seq),
-                parser::Command::BraceGroup(arr) => Self::new_from_command_lists(arr),
-                parser::Command::IfConstruct(condition, body) => Self::new_from_if(condition, body),
-                parser::Command::ElseConstruct(body) => Self::new_from_else(body),
-                parser::Command::WhileConstruct(condition, body) => {
-                    Self::new_from_while(condition, body)
-                }
-                parser::Command::SwitchConstruct(to_match, items) => {
-                    Self::new_from_switch(to_match, items)
-                }
-                parser::Command::MatchConstruct(items) => Self::new_from_match(items),
-            });
+            tp.children.push(Self::new_from_command(pi));
         }
 
         Self::new(Box::new(tp))

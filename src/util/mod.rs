@@ -73,6 +73,20 @@ pub trait LineReader {
     fn ps2_exit(&self) {}
 }
 
+pub struct NullReader;
+
+impl NullReader {
+    pub fn new() -> NullReader {
+        NullReader
+    }
+}
+
+impl LineReader for NullReader {
+    fn read_line(&mut self) -> Result<Option<String>, Box<Error>> {
+        Ok(None)
+    }
+}
+
 /// A generic, non-interactive [`LineReader`](trait.LineReader.html).
 pub struct FileLineReader<R: Read>(BufReader<R>);
 

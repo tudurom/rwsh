@@ -21,7 +21,7 @@ use crate::parser::{Parser, Program};
 use crate::task::{Task, TaskStatus};
 use crate::util::{BufReadChars, InteractiveLineReader, LineReader};
 use nix::sys::wait::WaitStatus;
-use nix::unistd::Pid;
+use nix::unistd::{self, ForkResult, Pid};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::env;
@@ -48,7 +48,7 @@ pub struct Config {
     pub pretty_print: bool,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 /// The current state of the shell.
 pub struct State {
     pub exit: i32,
@@ -57,6 +57,8 @@ pub struct State {
     pub last_status: i32,
     pub if_condition_ok: Option<bool>,
     pub config: Config,
+    pub process: Option<Rc<RefCell<Process>>>,
+    pub parser: Rc<RefCell<Parser>>,
 }
 
 fn read_vars() -> HashMap<String, Var> {
@@ -68,7 +70,7 @@ fn read_vars() -> HashMap<String, Var> {
 }
 
 impl State {
-    pub fn new(config: Config) -> State {
+    pub fn new(config: Config, parser: Rc<RefCell<Parser>>) -> State {
         State {
             exit: -1,
             last_status: 0,
@@ -76,6 +78,8 @@ impl State {
             vars: read_vars(),
             if_condition_ok: None,
             config,
+            process: None,
+            parser,
         }
     }
 
@@ -117,6 +121,21 @@ impl State {
                 }
             }
         }
+    }
+
+    pub fn fork(&mut self) -> Result<ForkResult, Box<Error>> {
+        let fr = unistd::fork()?;
+        match fr {
+            ForkResult::Child => {
+                // Get rid of opened files.
+                // This should be only the current script, if any.
+                self.parser.borrow_mut().blindfold()
+            }
+            ForkResult::Parent { child: pid, .. } => {
+                self.process = Some(self.new_process(pid));
+            }
+        }
+        Ok(fr)
     }
 }
 
@@ -163,7 +182,7 @@ impl<'a> Context<'a> {
 ///
 /// Use it with an [`InteractiveLineReader`](../util/struct.InteractiveLineReader.html) to get an interactive shell.
 pub struct Shell {
-    p: Parser,
+    p: Rc<RefCell<Parser>>,
     state: State,
 }
 
@@ -176,10 +195,10 @@ impl Shell {
     /// Returns a new `Shell` with the given [`LineReader`](../util/trait.LineReader.html).
     pub fn new(r: Box<LineReader>, config: Config) -> Shell {
         let buf = BufReadChars::new(r);
-        let p = Parser::new(buf);
+        let p = Rc::new(RefCell::new(Parser::new(buf)));
         Shell {
-            p,
-            state: State::new(config),
+            p: p.clone(),
+            state: State::new(config, p.clone()),
         }
     }
 
@@ -187,7 +206,7 @@ impl Shell {
     pub fn run(&mut self) {
         self.install_signal_handlers();
         while self.state.exit == -1 {
-            let t = match self.p.by_ref().next() {
+            let t = match self.p.borrow_mut().by_ref().next() {
                 None => {
                     self.state.exit = self.state.last_status;
                     break;
@@ -222,12 +241,6 @@ impl Shell {
 
     fn install_signal_handlers(&self) {
         // nothing yet
-    }
-}
-
-impl Default for Shell {
-    fn default() -> Self {
-        Self::new_interactive(Default::default())
     }
 }
 

@@ -20,7 +20,7 @@ pub mod sre;
 use super::sre::{parse_command as parse_sre_command, Command};
 use super::{escape, skip_whitespace};
 use super::{RawWord, Word};
-use crate::util::{BufReadChars, ParseError};
+use crate::util::{BufReadChars, NullReader, ParseError};
 use bitflags::bitflags;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -148,6 +148,10 @@ impl Lexer {
 
     pub fn ps2_exit(&mut self) {
         self.input.ps2_exit();
+    }
+
+    pub fn blindfold(&mut self) {
+        self.input = BufReadChars::new(Box::new(NullReader::new()));
     }
 
     fn read_unquoted_word(&mut self) -> Result<String, ParseError> {

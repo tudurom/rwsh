@@ -398,6 +398,10 @@ impl Parser {
         }
     }
 
+    pub fn blindfold(&mut self) {
+        self.lexer.borrow_mut().blindfold();
+    }
+
     fn peek(&self) -> Option<Result<Token, ParseError>> {
         self.lexer.borrow_mut().peek().cloned()
     }
