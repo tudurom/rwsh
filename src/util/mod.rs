@@ -73,6 +73,7 @@ pub trait LineReader {
     fn ps2_exit(&self) {}
 }
 
+#[derive(Default)]
 pub struct NullReader;
 
 impl NullReader {

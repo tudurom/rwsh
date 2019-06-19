@@ -29,6 +29,11 @@ use std::error::Error;
 use std::process::exit;
 use std::rc::Rc;
 
+pub enum Fork {
+    Child,
+    Parent(Rc<RefCell<Process>>),
+}
+
 #[derive(Clone, Debug)]
 pub enum Var {
     String(String),
@@ -123,19 +128,20 @@ impl State {
         }
     }
 
-    pub fn fork(&mut self) -> Result<ForkResult, Box<Error>> {
+    pub fn fork(&mut self) -> Result<Fork, Box<Error>> {
         let fr = unistd::fork()?;
         match fr {
             ForkResult::Child => {
                 // Get rid of opened files.
                 // This should be only the current script, if any.
-                self.parser.borrow_mut().blindfold()
+                self.parser.borrow_mut().blindfold();
+                Ok(Fork::Child)
             }
             ForkResult::Parent { child: pid, .. } => {
                 self.process = Some(self.new_process(pid));
+                Ok(Fork::Parent(self.process.as_ref().unwrap().clone()))
             }
         }
-        Ok(fr)
     }
 }
 
@@ -166,6 +172,7 @@ impl Process {
 /// It is guaranteed to be shared across all members of a job.
 pub struct Context<'a> {
     pub state: &'a mut State,
+    pub in_pipe: bool,
 }
 
 impl<'a> Context<'a> {
@@ -246,7 +253,10 @@ impl Shell {
 
 pub fn run_program(p: Program, state: &mut State) -> Result<(i32, Context), Box<Error>> {
     let mut task = Task::new_from_command_lists(p.0);
-    let mut ctx = Context { state };
+    let mut ctx = Context {
+        state,
+        in_pipe: false,
+    };
     let r = task.run(&mut ctx)?;
     Ok((r, ctx))
 }

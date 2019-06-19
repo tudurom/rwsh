@@ -4,4 +4,3 @@ For
 Functions
 Job control
 (C) || and && operators
-(A) Fix pipes
