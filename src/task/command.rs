@@ -52,20 +52,28 @@ impl Command {
         }
     }
 
+    fn do_exec(&self) {
+        if let Err(e) = unistd::execvp(
+            &os2c(OsStr::new(&self.args[0].as_str())),
+            self.args
+                .iter()
+                .map(|a| os2c(OsStr::new(&a)))
+                .collect::<Vec<CString>>()
+                .as_slice(),
+        ) {
+            eprintln!("{}: {}", self.args[0], e);
+            std::process::exit(127);
+        }
+    }
+
     fn process_start(&mut self, ctx: &mut Context) -> Result<(), String> {
+        if ctx.in_pipe {
+            self.do_exec();
+            // does not return
+        }
         match unistd::fork().map_err(|e| format!("failed to fork: {}", e))? {
             unistd::ForkResult::Child => {
-                if let Err(e) = unistd::execvp(
-                    &os2c(OsStr::new(&self.args[0].as_str())),
-                    self.args
-                        .iter()
-                        .map(|a| os2c(OsStr::new(&a)))
-                        .collect::<Vec<CString>>()
-                        .as_slice(),
-                ) {
-                    eprintln!("{}: {}", self.args[0], e);
-                    std::process::exit(127);
-                }
+                self.do_exec();
                 Ok(())
             }
             unistd::ForkResult::Parent { child: pid, .. } => {

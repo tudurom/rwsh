@@ -39,20 +39,29 @@ impl SRESequence {
         }
     }
 
+    fn do_exec(&self) {
+        let mut prev_address = None;
+        let mut buf = Buffer::new(stdin()).unwrap();
+        for prog in &self.seq.0 {
+            let inv = Invocation::new(prog.clone(), &buf, prev_address).unwrap();
+            let mut out = stdout();
+            let addr = inv.execute(&mut out, &mut buf).unwrap();
+            use std::io::Write;
+            out.flush().unwrap();
+            prev_address = Some(buf.apply_changes(addr));
+        }
+        std::process::exit(0);
+    }
+
     fn process_start(&mut self, ctx: &mut Context) -> Result<(), String> {
+        if ctx.in_pipe {
+            self.do_exec();
+            // does not return
+        }
         match unistd::fork().map_err(|e| format!("failed to fork: {}", e))? {
             unistd::ForkResult::Child => {
-                let mut prev_address = None;
-                let mut buf = Buffer::new(stdin()).unwrap();
-                for prog in &self.seq.0 {
-                    let inv = Invocation::new(prog.clone(), &buf, prev_address).unwrap();
-                    let mut out = stdout();
-                    let addr = inv.execute(&mut out, &mut buf).unwrap();
-                    use std::io::Write;
-                    out.flush().unwrap();
-                    prev_address = Some(buf.apply_changes(addr));
-                }
-                std::process::exit(0);
+                self.do_exec();
+                Ok(())
             }
             unistd::ForkResult::Parent { child: pid, .. } => {
                 self.process = Some(ctx.state.new_process(pid));

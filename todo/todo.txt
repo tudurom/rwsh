@@ -4,3 +4,5 @@ For
 Functions
 Job control
 (C) || and && operators
+(A) parameters in SRE commands
+(B) capture groups in switch and match

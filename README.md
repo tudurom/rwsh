@@ -42,8 +42,8 @@ See `todo/todo.txt`.
     - [x] While
     - [ ] For
 	    - [ ] String globbing
-    - [ ] Switch
-	- [ ] Matches (awk-like pattern list)
+    - [x] Switch
+	- [x] Matches (awk-like pattern list)
 - [ ] Functions
 - [ ] Builtins
     - [x] `cd`
