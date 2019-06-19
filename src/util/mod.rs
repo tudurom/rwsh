@@ -161,9 +161,8 @@ impl LineReader for InteractiveLineReader {
 }
 
 /// A char iterator for UTF-8 texts.
-#[derive(Clone)]
-pub struct BufReadChars<R: LineReader> {
-    r: R,
+pub struct BufReadChars {
+    r: Box<LineReader>,
     chars: Vec<char>,
     finished: bool,
     i: usize,
@@ -174,8 +173,8 @@ pub struct BufReadChars<R: LineReader> {
     peeked: Option<Option<char>>,
 }
 
-impl<R: LineReader> BufReadChars<R> {
-    pub fn new(r: R) -> BufReadChars<R> {
+impl BufReadChars {
+    pub fn new(r: Box<LineReader>) -> BufReadChars {
         BufReadChars {
             r,
             chars: Vec::new(),
@@ -242,7 +241,7 @@ impl<R: LineReader> BufReadChars<R> {
     }
 }
 
-impl<R: LineReader> Iterator for BufReadChars<R> {
+impl Iterator for BufReadChars {
     type Item = char;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(v) = self.peeked.take() {
@@ -280,7 +279,7 @@ pub mod tests {
         ];
         let s = "ab\ncd\nef\ngh";
         let dlr = DummyLineReader(s.lines());
-        let buf = super::BufReadChars::new(dlr);
+        let buf = super::BufReadChars::new(Box::new(dlr));
 
         assert_eq!(buf.collect::<Vec<char>>(), correct);
     }

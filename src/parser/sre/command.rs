@@ -17,7 +17,7 @@
  */
 use super::Command;
 use crate::parser::{escape, skip_whitespace};
-use crate::util::{BufReadChars, LineReader, ParseError};
+use crate::util::{BufReadChars, ParseError};
 
 fn arg_nr(name: char) -> i32 {
     match name {
@@ -48,7 +48,7 @@ fn has_command_argument(name: char) -> bool {
 }
 
 #[allow(clippy::collapsible_if)]
-fn read_arg<R: LineReader>(it: &mut BufReadChars<R>) -> Result<String, ParseError> {
+fn read_arg(it: &mut BufReadChars) -> Result<String, ParseError> {
     skip_whitespace(it, false);
     it.next(); // /
     let mut s = String::new();
@@ -75,7 +75,7 @@ fn read_arg<R: LineReader>(it: &mut BufReadChars<R>) -> Result<String, ParseErro
     }
 }
 
-fn read_regex_arg<R: LineReader>(it: &mut BufReadChars<R>) -> Result<String, ParseError> {
+fn read_regex_arg(it: &mut BufReadChars) -> Result<String, ParseError> {
     skip_whitespace(it, false);
     it.next(); // /
     let (s, closed) = crate::parser::misc::read_regexp(it, '/');
@@ -97,8 +97,8 @@ pub struct SimpleCommand {
 }
 
 /// Parses the whole command. If the command accepts a command argument, the argument is recursively parsed too.
-pub fn parse_command<R: LineReader>(
-    it: &mut BufReadChars<R>,
+pub fn parse_command(
+    it: &mut BufReadChars,
     brace: bool,
 ) -> Result<Option<SimpleCommand>, ParseError> {
     skip_whitespace(it, true);

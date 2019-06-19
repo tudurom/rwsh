@@ -18,6 +18,7 @@
 use crate::parser::Parser;
 use crate::shell::{self, Context};
 use crate::util::{BufReadChars, FileLineReader};
+use std::io::Cursor;
 
 pub fn eval(ctx: &mut Context, args: Vec<&str>) -> i32 {
     let mut args = args.into_iter();
@@ -26,7 +27,7 @@ pub fn eval(ctx: &mut Context, args: Vec<&str>) -> i32 {
     let mut code = args.map(String::from).collect::<Vec<String>>().join(" ");
     code.push('\n');
 
-    let reader = BufReadChars::new(FileLineReader::new(code.as_bytes()).unwrap());
+    let reader = BufReadChars::new(Box::new(FileLineReader::new(Cursor::new(code)).unwrap()));
     let mut parser = Parser::new(reader);
     let prog = parser.next().unwrap();
 

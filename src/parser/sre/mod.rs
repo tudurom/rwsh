@@ -21,7 +21,7 @@ pub mod command;
 
 use super::skip_whitespace;
 use crate::shell::pretty::*;
-use crate::util::{BufReadChars, LineReader, ParseError};
+use crate::util::{BufReadChars, ParseError};
 use address::ComposedAddress;
 
 #[derive(Debug, Clone)]
@@ -99,10 +99,7 @@ impl Command {
 }
 
 /// Parses the address and the simple command, returning a complete, ready-to-use command.
-pub fn parse_command<R: LineReader>(
-    it: &mut BufReadChars<R>,
-    brace: bool,
-) -> Result<Option<Command>, ParseError> {
+pub fn parse_command(it: &mut BufReadChars, brace: bool) -> Result<Option<Command>, ParseError> {
     skip_whitespace(it, true);
     let (p, original) = address::Parser::new(it)?;
     let address = match p.parse() {

@@ -20,7 +20,7 @@ pub mod sre;
 use super::sre::{parse_command as parse_sre_command, Command};
 use super::{escape, skip_whitespace};
 use super::{RawWord, Word};
-use crate::util::{BufReadChars, LineReader, ParseError};
+use crate::util::{BufReadChars, ParseError};
 use bitflags::bitflags;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -100,9 +100,8 @@ bitflags! {
 }
 
 /// Transforms text to a sequence of [`Token`s](enum.Token.html).
-#[derive(Clone)]
-pub struct Lexer<R: LineReader> {
-    pub input: BufReadChars<R>,
+pub struct Lexer {
+    pub input: BufReadChars,
     pub mode: LexMode,
     pipe_follows: bool,
     errored: bool,
@@ -122,10 +121,10 @@ macro_rules! tok {
     };
 }
 
-impl<R: LineReader> Lexer<R> {
+impl Lexer {
     /// Creates a new lexer based on a `char` iterator,
     /// usually a [`BufReadChars`](../../util/struct.BufReadChars.html).
-    pub fn new(input: BufReadChars<R>) -> Lexer<R> {
+    pub fn new(input: BufReadChars) -> Lexer {
         Lexer {
             input,
             pipe_follows: false,
@@ -204,7 +203,7 @@ impl<R: LineReader> Lexer<R> {
     }
 }
 
-impl<R: LineReader> Iterator for Lexer<R> {
+impl Iterator for Lexer {
     type Item = Result<Token, ParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {

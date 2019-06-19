@@ -15,10 +15,10 @@
  * You should have received a copy of the GNU General Public License
  * along with RWSH. If not, see <http://www.gnu.org/licenses/>.
  */
-use crate::util::{BufReadChars, LineReader};
+use crate::util::BufReadChars;
 
 /// Reads a regular expression until it reaches a delimiter.
-pub fn read_regexp<R: LineReader>(it: &mut BufReadChars<R>, delimiter: char) -> (String, bool) {
+pub fn read_regexp(it: &mut BufReadChars, delimiter: char) -> (String, bool) {
     let mut s = String::new();
     let mut closed = false;
 

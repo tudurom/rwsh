@@ -162,21 +162,19 @@ impl<'a> Context<'a> {
 /// The shell engine with its internal state.
 ///
 /// Use it with an [`InteractiveLineReader`](../util/struct.InteractiveLineReader.html) to get an interactive shell.
-pub struct Shell<R: LineReader> {
-    p: Parser<R>,
+pub struct Shell {
+    p: Parser,
     state: State,
 }
 
-impl Shell<InteractiveLineReader> {
+impl Shell {
     /// Create a new `Shell` with an [`InteractiveLineReader`](../util/struct.InteractiveLineReader.html).
-    pub fn new_interactive(config: Config) -> Shell<InteractiveLineReader> {
-        Self::new(InteractiveLineReader::new(), config)
+    pub fn new_interactive(config: Config) -> Shell {
+        Self::new(Box::new(InteractiveLineReader::new()), config)
     }
-}
 
-impl<R: LineReader> Shell<R> {
     /// Returns a new `Shell` with the given [`LineReader`](../util/trait.LineReader.html).
-    pub fn new(r: R, config: Config) -> Shell<R> {
+    pub fn new(r: Box<LineReader>, config: Config) -> Shell {
         let buf = BufReadChars::new(r);
         let p = Parser::new(buf);
         Shell {
@@ -227,7 +225,7 @@ impl<R: LineReader> Shell<R> {
     }
 }
 
-impl Default for Shell<InteractiveLineReader> {
+impl Default for Shell {
     fn default() -> Self {
         Self::new_interactive(Default::default())
     }

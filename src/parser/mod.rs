@@ -22,7 +22,7 @@ pub mod sre;
 
 use self::lex::{LexMode, Lexer, Token};
 use crate::shell::pretty::*;
-use crate::util::{BufReadChars, LineReader, ParseError};
+use crate::util::{BufReadChars, ParseError};
 use result::ResultOptionExt;
 use sre::Command as SRECommand;
 use std::cell::RefCell;
@@ -36,7 +36,7 @@ pub enum WordStringReadMode {
     Pattern,
 }
 
-fn skip_whitespace<R: LineReader>(it: &mut BufReadChars<R>, skip_newlines: bool) -> usize {
+fn skip_whitespace(it: &mut BufReadChars, skip_newlines: bool) -> usize {
     let mut len: usize = 0;
     while let Some(&c) = it.peek() {
         if !c.is_whitespace() || (c == '\n' && !skip_newlines) {
@@ -377,27 +377,24 @@ impl PrettyPrint for Command {
 }
 
 /// Parses the series of [`Token`s](./lex/enum.Token.html) to the AST ([`ParseNode`s](enum.ParseNode.html)).
-#[derive(Clone)]
-pub struct Parser<R: LineReader> {
-    lexer: RefCell<Lexer<R>>,
+pub struct Parser {
+    lexer: RefCell<Lexer>,
     error: Option<String>,
     brace_group_level: u32,
-    subshell_level: u32,
 }
 
-impl<R: LineReader> Parser<R> {
-    pub fn new(r: BufReadChars<R>) -> Parser<R> {
+impl Parser {
+    pub fn new(r: BufReadChars) -> Parser {
         let l = Lexer::new(r);
         Self::from_lexer(l)
     }
 
     /// Creates a new parser from a [`Lexer`](./lex/struct.Lexer.html).
-    pub fn from_lexer(lexer: Lexer<R>) -> Parser<R> {
+    pub fn from_lexer(lexer: Lexer) -> Parser {
         Parser {
             lexer: RefCell::new(lexer),
             error: None,
             brace_group_level: 0,
-            subshell_level: 0,
         }
     }
 
@@ -1173,7 +1170,7 @@ impl<R: LineReader> Parser<R> {
     }
 }
 
-impl<R: LineReader> Iterator for Parser<R> {
+impl Iterator for Parser {
     type Item = Result<Program, ParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {

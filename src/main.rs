@@ -39,13 +39,13 @@ fn main() {
     };
     if let Some(input) = matches.value_of("input") {
         Shell::new(
-            FileLineReader::new(File::open(input).unwrap()).unwrap(),
+            Box::new(FileLineReader::new(File::open(input).unwrap()).unwrap()),
             cfg,
         )
         .run();
     } else if unistd::isatty(0).unwrap() {
         Shell::new_interactive(cfg).run();
     } else {
-        Shell::new(FileLineReader::new(stdin()).unwrap(), cfg).run();
+        Shell::new(Box::new(FileLineReader::new(stdin()).unwrap()), cfg).run();
     }
 }

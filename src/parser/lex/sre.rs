@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with RWSH. If not, see <http://www.gnu.org/licenses/>.
  */
-use crate::util::{BufReadChars, LineReader, ParseError};
+use crate::util::{BufReadChars, ParseError};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -32,9 +32,7 @@ pub enum Token {
     Dollar,
 }
 
-pub fn lex_address<R: LineReader>(
-    it: &mut BufReadChars<R>,
-) -> Result<(Vec<Token>, String), ParseError> {
+pub fn lex_address(it: &mut BufReadChars) -> Result<(Vec<Token>, String), ParseError> {
     let mut v: Vec<Token> = Vec::new();
     let mut original = String::new();
     while let Some(&c) = it.peek() {
@@ -78,7 +76,7 @@ pub fn lex_address<R: LineReader>(
     Ok((v, original))
 }
 
-fn scan_space<R: LineReader>(it: &mut BufReadChars<R>) {
+fn scan_space(it: &mut BufReadChars) {
     while let Some(&c) = it.peek() {
         if c.is_whitespace() {
             it.next();
@@ -88,7 +86,7 @@ fn scan_space<R: LineReader>(it: &mut BufReadChars<R>) {
     }
 }
 
-fn scan_address<R: LineReader>(it: &mut BufReadChars<R>, is_char: bool) -> Token {
+fn scan_address(it: &mut BufReadChars, is_char: bool) -> Token {
     if is_char {
         it.next(); // eat #
     }
@@ -116,10 +114,7 @@ fn scan_address<R: LineReader>(it: &mut BufReadChars<R>, is_char: bool) -> Token
 }
 
 #[allow(clippy::collapsible_if)]
-fn scan_regexp<R: LineReader>(
-    it: &mut BufReadChars<R>,
-    reverse: bool,
-) -> Result<Token, ParseError> {
+fn scan_regexp(it: &mut BufReadChars, reverse: bool) -> Result<Token, ParseError> {
     let mut s = String::new();
     let delimiter = if reverse { '?' } else { '/' };
 

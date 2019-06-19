@@ -16,7 +16,7 @@
  * along with RWSH. If not, see <http://www.gnu.org/licenses/>.
  */
 use crate::parser::lex::sre::{lex_address, Token};
-use crate::util::{BufReadChars, LineReader, ParseError};
+use crate::util::{BufReadChars, ParseError};
 use std::cell::RefCell;
 use std::iter::Peekable;
 use std::vec::IntoIter;
@@ -159,9 +159,7 @@ pub struct Parser<I: Iterator<Item = Token>> {
 }
 
 impl Parser<IntoIter<Token>> {
-    pub fn new<R: LineReader>(
-        it: &mut BufReadChars<R>,
-    ) -> Result<(Parser<IntoIter<Token>>, String), ParseError> {
+    pub fn new(it: &mut BufReadChars) -> Result<(Parser<IntoIter<Token>>, String), ParseError> {
         let (tokens, original) = lex_address(it)?;
         let it = tokens.into_iter();
         Ok((

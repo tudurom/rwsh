@@ -38,8 +38,8 @@ impl<'a> LineReader for DummyLineReader<'a> {
     }
 }
 
-pub fn new_dummy_buf(l: Lines) -> BufReadChars<DummyLineReader> {
-    BufReadChars::new(DummyLineReader(l))
+pub fn new_dummy_buf(l: Lines<'static>) -> BufReadChars {
+    BufReadChars::new(Box::new(DummyLineReader(l)))
 }
 
 pub fn new_composed_address(addr: &'static str) -> ComposedAddress {
