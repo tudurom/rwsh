@@ -15,6 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with RWSH. If not, see <http://www.gnu.org/licenses/>.
  */
+//! Miscelaneous reading functions.
 use crate::util::BufReadChars;
 
 /// Reads a regular expression until it reaches a delimiter.

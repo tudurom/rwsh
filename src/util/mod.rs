@@ -248,9 +248,12 @@ impl BufReadChars {
         self.peeked.as_ref().unwrap().as_ref()
     }
 
+    /// Put a new parsing context on the stack to show in the prompt.
     pub fn ps2_enter(&mut self, s: String) {
         self.r.ps2_enter(s);
     }
+
+    /// Remove the current parsing context from the stack.
     pub fn ps2_exit(&mut self) {
         self.r.ps2_exit();
     }

@@ -15,6 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with RWSH. If not, see <http://www.gnu.org/licenses/>.
  */
+//! Lexing routines.
 pub mod sre;
 
 use super::sre::{parse_command as parse_sre_command, Command};
@@ -91,6 +92,7 @@ impl Token {
 }
 
 bitflags! {
+    /// Enables and disables certain tokens, based on the current parser state.
     pub struct LexMode: u32 {
         /// Enables the `end` keyword.
         const END   = 0b0000_0001;
@@ -142,14 +144,17 @@ impl Lexer {
         self.peeked.as_ref().unwrap().as_ref()
     }
 
+    /// Put a new parsing context on the stack to show in the prompt.
     pub fn ps2_enter(&mut self, s: String) {
         self.input.ps2_enter(s);
     }
 
+    /// Remove the current parsing context from the stack.
     pub fn ps2_exit(&mut self) {
         self.input.ps2_exit();
     }
 
+    /// Switch the input source to null.
     pub fn blindfold(&mut self) {
         self.input = BufReadChars::new(Box::new(NullReader::new()));
     }

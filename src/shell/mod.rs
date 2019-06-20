@@ -230,8 +230,8 @@ impl Shell {
                     }
                     match run_program(p, &mut self.state) {
                         Ok(_status) => {
-                            // TODO: break on exit
-                            // if (status.0 != 0 && break_on_exit_flag) {
+                            // TODO: break on error
+                            // if (status.0 != 0 && break_on_error_flag) {
                             //     self.state.exit = status.0
                             // }
                         }

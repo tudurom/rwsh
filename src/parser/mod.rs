@@ -28,8 +28,8 @@ use sre::Command as SRECommand;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub enum WordStringReadMode {
-    Unqoted,
+enum WordStringReadMode {
+    // Unqoted,
     SingleQuoted,
     DoubleQuoted,
     Parameter,
@@ -91,11 +91,13 @@ pub fn escape(c: char) -> char {
     }
 }
 
+/// An entity to be substituted in a string. Always starts with the dollar sign (`$`).
 #[derive(Clone, PartialEq, Debug)]
 pub struct WordParameter {
     pub name: String,
 }
 
+/// A reference-counted string that can be substituted in-place.
 pub type Word = Rc<RefCell<RawWord>>;
 
 pub fn naked_word(mut w: Word) -> RawWord {
@@ -215,11 +217,13 @@ impl PrettyPrint for SRESequence {
 /// A chain of [`Command`s](enum.Command.html) piped together
 pub struct Pipeline(pub Vec<Command>);
 
+/// A node in a [`CommandList`](struct.CommandList.html).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Node {
     Pipeline(Pipeline),
 }
 
+/// A command list is a list of commands with binary operators between them.
 #[derive(Debug, PartialEq, Clone)]
 pub struct CommandList(pub Node);
 
@@ -234,6 +238,7 @@ impl PrettyPrint for CommandList {
     }
 }
 
+/// A chain of commands that can be written on a line.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program(pub Vec<CommandList>);
 
@@ -398,6 +403,7 @@ impl Parser {
         }
     }
 
+    /// Switch the input source to null.
     pub fn blindfold(&mut self) {
         self.lexer.borrow_mut().blindfold();
     }
@@ -1022,10 +1028,7 @@ impl Parser {
     // Becase of the nature of shell strings, this part (parse_word_*) is extremely "evil".
     // These functions operate on chars instead of tokens, but are part of the parser because
     // they require some parsing (such as command substitution).
-    pub fn parse_word_string(
-        &mut self,
-        mode: WordStringReadMode,
-    ) -> Result<(Word, usize), ParseError> {
+    fn parse_word_string(&mut self, mode: WordStringReadMode) -> Result<(Word, usize), ParseError> {
         let mut s = String::new();
         let mut escaping = false;
         if let WordStringReadMode::SingleQuoted = mode {
@@ -1056,11 +1059,13 @@ impl Parser {
                 }
             } else {
                 match mode {
+                    /*
                     WordStringReadMode::Unqoted => {
                         if !lex::is_clear_string_char(c) {
                             break;
                         }
                     }
+                    */
                     WordStringReadMode::SingleQuoted => {
                         if c == '\'' {
                             input.next();
@@ -1146,7 +1151,7 @@ impl Parser {
         }
     }
 
-    pub fn parse_word_parameter(&mut self) -> Result<Word, ParseError> {
+    fn parse_word_parameter(&mut self) -> Result<Word, ParseError> {
         let (w, len) = self.parse_word_string(WordStringReadMode::Parameter)?;
         if len == 0 {
             Ok(RawWord::Parameter(WordParameter {
@@ -1166,7 +1171,7 @@ impl Parser {
         }
     }
 
-    pub fn parse_word_command(&mut self) -> Result<Word, ParseError> {
+    fn parse_word_command(&mut self) -> Result<Word, ParseError> {
         self.next_tok(); // (
         let prog = self.parse_program(false).invert()?.unwrap();
         self.next_tok(); // )

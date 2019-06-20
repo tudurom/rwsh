@@ -30,8 +30,13 @@ use exit::exit;
 use r#let::{r#let, unset};
 use r#true::{r#false, r#true};
 
+/// A built-in command prototype.
 type BuiltinFunc = fn(&mut Context, Vec<&str>) -> i32;
 
+/// A built-in command.
+///
+/// Built-in commands operate on the context of the shell.
+/// When not piped, they are run in the shell's process.
 #[derive(Clone, Copy)]
 pub struct Builtin {
     pub name: &'static str,
@@ -67,6 +72,7 @@ static BULTINS: [Builtin; 8] = [
     b!(unset),
 ];
 
+/// Find a built-in function by name.
 pub fn get_builtin(name: &str) -> Option<Builtin> {
     BULTINS
         .binary_search_by(|b| b.name.cmp(name))
