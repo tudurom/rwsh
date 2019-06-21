@@ -19,9 +19,9 @@
 pub mod address;
 pub mod command;
 
-use super::skip_whitespace;
+use super::Parser;
 use crate::shell::pretty::*;
-use crate::util::{BufReadChars, ParseError};
+use crate::util::ParseError;
 use address::ComposedAddress;
 
 #[derive(Debug, Clone)]
@@ -98,16 +98,16 @@ impl Command {
     }
 }
 
+fn skip_whitespace(p: &mut Parser, break_at_newline: bool) {
+    crate::parser::skip_whitespace(&mut p.lexer.borrow_mut().input, break_at_newline);
+}
+
 /// Parses the address and the simple command, returning a complete, ready-to-use command.
-pub fn parse_command(it: &mut BufReadChars, brace: bool) -> Result<Option<Command>, ParseError> {
-    skip_whitespace(it, true);
-    let (p, original) = address::Parser::new(it)?;
-    let address = match p.parse() {
-        Ok(x) => x,
-        Err(e) => return Err(it.new_error(e)),
-    }
-    .unwrap_or_default();
-    let simple = match command::parse_command(it, brace)? {
+pub fn parse_command(p: &mut Parser, brace: bool) -> Result<Option<Command>, ParseError> {
+    skip_whitespace(p, false);
+    let (ap, original) = address::Parser::new(&mut p.lexer.borrow_mut().input)?;
+    let address = ap.parse().map_err(|e| p.new_error(e))?.unwrap_or_default();
+    let simple = match command::parse_command(p, brace)? {
         Some(c) => c,
         None => return Ok(None),
     };
@@ -123,12 +123,15 @@ pub fn parse_command(it: &mut BufReadChars, brace: bool) -> Result<Option<Comman
 #[cfg(test)]
 mod tests {
     use crate::parser::sre::address::{ComposedAddress, SimpleAddress};
+    use crate::parser::Parser;
     use crate::tests::common::new_dummy_buf;
     #[test]
     fn smoke() {
-        let mut buf = new_dummy_buf("/something /a/else/ ,p ,x/Emacs/ /{TM}/d".lines());
+        let mut p = Parser::new(new_dummy_buf(
+            "/something /a/else/ ,p ,x/Emacs/ /{TM}/d".lines(),
+        ));
         assert_eq!(
-            super::parse_command(&mut buf, false).unwrap().unwrap(),
+            super::parse_command(&mut p, false).unwrap().unwrap(),
             super::Command {
                 address: ComposedAddress::new(
                     SimpleAddress::Regex("/something ".to_owned(), false),
@@ -142,7 +145,7 @@ mod tests {
             }
         );
         assert_eq!(
-            super::parse_command(&mut buf, false).unwrap().unwrap(),
+            super::parse_command(&mut p, false).unwrap().unwrap(),
             super::Command {
                 address: ComposedAddress::new(
                     SimpleAddress::Comma,
@@ -164,7 +167,7 @@ mod tests {
             }
         );
         assert_eq!(
-            super::parse_command(&mut buf, false).unwrap().unwrap(),
+            super::parse_command(&mut p, false).unwrap().unwrap(),
             super::Command {
                 address: ComposedAddress::new(
                     SimpleAddress::Comma,

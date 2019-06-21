@@ -15,9 +15,9 @@
  * You should have received a copy of the GNU General Public License
  * along with RWSH. If not, see <http://www.gnu.org/licenses/>.
  */
-use super::Command;
-use crate::parser::{escape, skip_whitespace};
-use crate::util::{BufReadChars, ParseError};
+use super::{skip_whitespace, Command};
+use crate::parser::{escape, Parser};
+use crate::util::ParseError;
 
 fn arg_nr(name: char) -> i32 {
     match name {
@@ -48,12 +48,12 @@ fn has_command_argument(name: char) -> bool {
 }
 
 #[allow(clippy::collapsible_if)]
-fn read_arg(it: &mut BufReadChars) -> Result<String, ParseError> {
-    skip_whitespace(it, false);
-    it.next(); // /
+fn read_arg(p: &mut Parser) -> Result<String, ParseError> {
+    skip_whitespace(p, true);
+    p.next_char(); // /
     let mut s = String::new();
     let mut escaping = false;
-    while let Some(&c) = it.peek() {
+    while let Some(c) = p.peek_char() {
         if escaping {
             escaping = false;
             s.push(escape(c));
@@ -66,23 +66,23 @@ fn read_arg(it: &mut BufReadChars) -> Result<String, ParseError> {
                 s.push(c);
             }
         }
-        it.next();
+        p.next_char();
     }
     if escaping {
-        Err(it.new_error("unexpected EOF while escaping".to_owned()))
+        Err(p.new_error("unexpected EOF while escaping".to_owned()))
     } else {
         Ok(s)
     }
 }
 
-fn read_regex_arg(it: &mut BufReadChars) -> Result<String, ParseError> {
-    skip_whitespace(it, false);
-    it.next(); // /
-    let (s, closed) = crate::parser::misc::read_regexp(it, '/');
+fn read_regex_arg(p: &mut Parser) -> Result<String, ParseError> {
+    skip_whitespace(p, true);
+    p.next_char(); // /
+    let (s, closed) = crate::parser::misc::read_regexp(&mut p.lexer.borrow_mut().input, '/');
     if closed {
         Ok(s)
     } else {
-        Err(it.new_error("unexpected EOF while reading regexp".to_owned()))
+        Err(p.new_error("unexpected EOF while reading regexp".to_owned()))
     }
 }
 
@@ -97,48 +97,46 @@ pub struct SimpleCommand {
 }
 
 /// Parses the whole command. If the command accepts a command argument, the argument is recursively parsed too.
-pub fn parse_command(
-    it: &mut BufReadChars,
-    brace: bool,
-) -> Result<Option<SimpleCommand>, ParseError> {
-    skip_whitespace(it, true);
-    let chr = it.next();
+pub fn parse_command(p: &mut Parser, brace: bool) -> Result<Option<SimpleCommand>, ParseError> {
+    skip_whitespace(p, false);
+
+    let chr = p.next_char();
     let nr = chr.map_or(-1, arg_nr);
     let mut args = Vec::new();
     match chr {
         Some(name) if nr != -1 => {
             let mut i = 0;
-            while i < nr && it.peek() == Some(&'/') {
+            while i < nr && p.peek_char() == Some('/') {
                 let arg = if i == 0 && has_regex_argument(name) {
-                    read_regex_arg(it)?
+                    read_regex_arg(p)?
                 } else {
-                    read_arg(it)?
+                    read_arg(p)?
                 };
                 args.push(arg);
                 i += 1;
             }
             if i < nr {
-                let peek = it.peek().cloned();
+                let peek = p.peek_char();
                 if peek.is_none() {
-                    Err(it.new_error("unexpected EOF when reading argument".to_owned()))
+                    Err(p.new_error("unexpected EOF when reading argument".to_owned()))
                 } else {
-                    Err(it.new_error(format!(
+                    Err(p.new_error(format!(
                         "unexpected character '{}' when reading argument",
                         peek.unwrap()
                     )))
                 }
             } else {
                 if nr > 0 {
-                    if let Some(&'/') = it.peek() {
-                        it.next();
+                    if let Some('/') = p.peek_char() {
+                        p.next_char();
                     } else {
-                        return Err(it.new_error("missing terminal '/' in parameter".to_owned()));
+                        return Err(p.new_error("missing terminal '/' in parameter".to_owned()));
                     }
                 }
                 let command_args = if has_command_argument(name) {
-                    it.ps2_enter(format!("{}", name));
-                    let r = vec![super::parse_command(it, false)?.unwrap()];
-                    it.ps2_exit();
+                    p.ps2_enter(format!("{}", name));
+                    let r = vec![super::parse_command(p, false)?.unwrap()];
+                    p.ps2_exit();
                     r
                 } else {
                     vec![]
@@ -151,14 +149,14 @@ pub fn parse_command(
             }
         }
         Some('{') => {
-            it.ps2_enter("{".to_owned());
-            let mut x = super::parse_command(it, true);
+            p.ps2_enter("{".to_owned());
+            let mut x = super::parse_command(p, true);
             let mut command_args = Vec::new();
             while let Ok(Some(c)) = x {
                 command_args.push(c);
-                x = super::parse_command(it, true);
+                x = super::parse_command(p, true);
             }
-            it.ps2_exit();
+            p.ps2_exit();
             if x.is_err() {
                 Err(x.err().unwrap())
             } else {
@@ -170,22 +168,23 @@ pub fn parse_command(
             }
         }
         Some('}') if brace => Ok(None),
-        Some(c) => Err(it.new_error(format!(
+        Some(c) => Err(p.new_error(format!(
             "unexpected character '{}' when reading command name",
             c
         ))),
-        None => Err(it.new_error("unexpected EOF when reading command".to_owned())),
+        None => Err(p.new_error("unexpected EOF when reading command".to_owned())),
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::parser::Parser;
     use crate::tests::common::new_dummy_buf;
 
     #[test]
     fn smoke() {
         assert_eq!(
-            super::parse_command(&mut new_dummy_buf("p".lines()), false)
+            super::parse_command(&mut Parser::new(new_dummy_buf("p".lines())), false)
                 .unwrap()
                 .unwrap(),
             super::SimpleCommand {
@@ -195,7 +194,7 @@ mod tests {
             }
         );
         assert_eq!(
-            super::parse_command(&mut new_dummy_buf("a/xd/".lines()), false)
+            super::parse_command(&mut Parser::new(new_dummy_buf("a/xd/".lines())), false)
                 .unwrap()
                 .unwrap(),
             super::SimpleCommand {
@@ -208,9 +207,12 @@ mod tests {
 
     #[test]
     fn command_arg() {
-        let v = super::parse_command(&mut new_dummy_buf("x/lmao/ 1x/kek/ 2a/xd/".lines()), false)
-            .unwrap()
-            .unwrap();
+        let v = super::parse_command(
+            &mut Parser::new(new_dummy_buf("x/lmao/ 1x/kek/ 2a/xd/".lines())),
+            false,
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(v.command_args.clone()[0].name, 'x');
         assert_eq!(v.command_args.clone()[0].command_args[0].name, 'a');
         assert!(v.command_args[0].command_args[0].command_args.is_empty());
@@ -218,9 +220,11 @@ mod tests {
 
     #[test]
     fn many_string_arguments() {
-        let mut buf = new_dummy_buf("Z/xd  &$\\n#@\\/xd/\\tlol    /ke.k\\//".lines());
+        let mut p = Parser::new(new_dummy_buf(
+            "Z/xd  &$\\n#@\\/xd/\\tlol    /ke.k\\//".lines(),
+        ));
         assert_eq!(
-            super::parse_command(&mut buf, false).unwrap().unwrap(),
+            super::parse_command(&mut p, false).unwrap().unwrap(),
             super::SimpleCommand {
                 name: 'Z',
                 args: vec![

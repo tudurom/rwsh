@@ -18,7 +18,6 @@
 //! Lexing routines.
 pub mod sre;
 
-use super::sre::{parse_command as parse_sre_command, Command};
 use super::{escape, skip_whitespace};
 use super::{RawWord, Word};
 use crate::util::{BufReadChars, NullReader, ParseError};
@@ -32,7 +31,7 @@ pub enum TokenKind {
     /// The pipe (`|`) character.
     Pipe,
     /// A structural regular expression pipe (`|>`) and its SRE code
-    Pizza(Command),
+    Pizza,
     Newline,
     /// A sequence of concatenated words.
     Word(Word),
@@ -193,23 +192,6 @@ impl Lexer {
                 .new_error(format!("unexpected character '{}'", c)))
         }
     }
-
-    fn read_sre(&mut self) -> Option<Result<Token, ParseError>> {
-        self.input.ps2_enter("pizza".to_owned());
-        let r = match parse_sre_command(&mut self.input, false) {
-            Ok(Some(sre)) => {
-                self.pipe_follows = true;
-                Some(Ok(tok!(TokenKind::Pizza(sre), 1, self.input)))
-            }
-            Ok(None) => panic!(),
-            Err(e) => {
-                self.errored = true;
-                Some(Err(e))
-            }
-        };
-        self.input.ps2_exit();
-        r
-    }
 }
 
 impl Iterator for Lexer {
@@ -257,13 +239,13 @@ impl Iterator for Lexer {
                 self.input.next();
                 if let Some('>') = self.input.peek() {
                     self.input.next();
-                    self.read_sre()
+                    Some(Ok(tok!(TokenKind::Pizza, 2, self.input)))
                 } else {
                     Some(Ok(tok!(TokenKind::Pipe, 1, self.input)))
                 }
             } else if c == '🍕' {
                 self.input.next();
-                self.read_sre()
+                Some(Ok(tok!(TokenKind::Pizza, 1, self.input)))
             } else if c == '\n' {
                 self.input.next();
                 Some(Ok(tok!(TokenKind::Newline, 0, self.input)))
@@ -295,7 +277,7 @@ impl Iterator for Lexer {
                 self.input.next();
                 Some(Ok(tok!(TokenKind::Slash, 1, self.input)))
             } else if c.is_whitespace() {
-                let len = skip_whitespace(&mut self.input, false);
+                let len = skip_whitespace(&mut self.input, true);
                 Some(Ok(tok!(TokenKind::Space, len, self.input)))
             } else {
                 match self.read_unquoted_word() {
@@ -448,11 +430,7 @@ mod tests {
 
     #[test]
     fn lex() {
-        use crate::parser::sre::{
-            address::{ComposedAddress, SimpleAddress},
-            Command,
-        };
-        let s = "test | {cat\nmeow}())} |> a/pizza/ | lolcat";
+        let s = "test | {cat\nmeow}())} |>\n";
         let buf = new_dummy_buf(s.lines());
         macro_rules! tok {
             ($kind:expr) => {
@@ -486,19 +464,7 @@ mod tests {
             Ok(tok!(RParen)),
             Ok(tok!(RBrace)),
             Ok(tok!(Space)),
-            Ok(tok!(Pizza(Command::new(
-                ComposedAddress::new(SimpleAddress::Dot, None, None),
-                'a',
-                vec!["pizza".to_owned()],
-                vec![],
-                String::new(),
-            )))),
-            Ok(tok!(Space)),
-            Ok(tok!(Pipe)),
-            Ok(tok!(Space)),
-            Ok(tok!(Word(
-                super::RawWord::String("lolcat".to_owned(), false).into()
-            ))),
+            Ok(tok!(Pizza)),
             Ok(tok!(Newline)),
         ];
         let l = super::Lexer::new(buf);

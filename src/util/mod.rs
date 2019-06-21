@@ -64,12 +64,18 @@ impl Error for ParseError {}
 
 /// An interface for reading lines of UTF-8 texts.
 ///
-/// **Important**: It is guaranteed that all lines end in '\n' or `EOF`.
+/// **Important**: It is guaranteed that all lines end in '\n'.
 pub trait LineReader {
+    /// Get the next line from the input source. Return `Ok(None)` if EOF
+    /// was reached.
+    ///
+    /// It must end in '\n'.
     fn read_line(&mut self) -> Result<Option<String>, Box<Error>>;
 
+    /// Put a new parsing context on the stack to show in the prompt.
     fn ps2_enter(&self, _s: String) {}
 
+    /// Remove the current parsing context from the stack.
     fn ps2_exit(&self) {}
 }
 
@@ -248,12 +254,10 @@ impl BufReadChars {
         self.peeked.as_ref().unwrap().as_ref()
     }
 
-    /// Put a new parsing context on the stack to show in the prompt.
     pub fn ps2_enter(&mut self, s: String) {
         self.r.ps2_enter(s);
     }
 
-    /// Remove the current parsing context from the stack.
     pub fn ps2_exit(&mut self) {
         self.r.ps2_exit();
     }

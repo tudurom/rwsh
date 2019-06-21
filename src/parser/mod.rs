@@ -24,7 +24,7 @@ use self::lex::{LexMode, Lexer, Token};
 use crate::shell::pretty::*;
 use crate::util::{BufReadChars, ParseError};
 use result::ResultOptionExt;
-use sre::Command as SRECommand;
+use sre::{parse_command as parse_sre_command, Command as SRECommand};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -36,10 +36,10 @@ enum WordStringReadMode {
     Pattern,
 }
 
-fn skip_whitespace(it: &mut BufReadChars, skip_newlines: bool) -> usize {
+fn skip_whitespace(it: &mut BufReadChars, break_at_newline: bool) -> usize {
     let mut len: usize = 0;
     while let Some(&c) = it.peek() {
-        if !c.is_whitespace() || (c == '\n' && !skip_newlines) {
+        if !c.is_whitespace() || (c == '\n' && break_at_newline) {
             break;
         }
         len += 1;
@@ -408,16 +408,37 @@ impl Parser {
         self.lexer.borrow_mut().blindfold();
     }
 
-    fn peek(&self) -> Option<Result<Token, ParseError>> {
+    /// Peek a token without advancing the iteration.
+    pub fn peek(&self) -> Option<Result<Token, ParseError>> {
         self.lexer.borrow_mut().peek().cloned()
     }
 
-    fn peek_char(&self) -> Option<char> {
+    /// Get the next token and advance the iteration.
+    pub fn next_tok(&self) -> Option<Result<Token, ParseError>> {
+        self.lexer.borrow_mut().next()
+    }
+
+    /// Peek a character from the lexer's input source.
+    pub fn peek_char(&self) -> Option<char> {
         self.lexer.borrow_mut().input.peek().cloned()
     }
 
-    fn next_tok(&self) -> Option<Result<Token, ParseError>> {
-        self.lexer.borrow_mut().next()
+    /// Get the next character from the lexer's input source.
+    pub fn next_char(&self) -> Option<char> {
+        self.lexer.borrow_mut().input.next()
+    }
+
+    /// Return error from the current position in the text.
+    pub fn new_error(&self, s: String) -> ParseError {
+        self.lexer.borrow_mut().input.new_error(s)
+    }
+
+    pub fn ps2_enter(&self, s: String) {
+        self.lexer.borrow_mut().ps2_enter(s)
+    }
+
+    pub fn ps2_exit(&self) {
+        self.lexer.borrow_mut().ps2_exit()
     }
 
     fn parse_program(&mut self, top_level: bool) -> Option<Result<Program, ParseError>> {
@@ -444,7 +465,7 @@ impl Parser {
                 }
                 ref kind if can_start_word(kind) => {}
                 lex::TokenKind::LBrace => {}
-                lex::TokenKind::Pizza(_) => {}
+                lex::TokenKind::Pizza => {}
                 _ if top_level => {
                     return Some(Err(p.new_error(format!("unexpected token {:?}", p))))
                 }
@@ -507,7 +528,7 @@ impl Parser {
                     ))
                     | Some(Ok(
                         ref tok @ lex::Token {
-                            kind: lex::TokenKind::Pizza(_),
+                            kind: lex::TokenKind::Pizza,
                             ..
                         },
                     )) => {
@@ -840,15 +861,16 @@ impl Parser {
         self.skip_space(false);
         match self.peek() {
             Some(Ok(lex::Token {
-                kind: lex::TokenKind::Pizza(_),
+                kind: lex::TokenKind::Pizza,
                 ..
             })) => {
                 let mut commands = Vec::<SRECommand>::new();
                 while let Some(Ok(lex::Token {
-                    kind: lex::TokenKind::Pizza(sre),
+                    kind: lex::TokenKind::Pizza,
                     ..
                 })) = self.peek()
                 {
+                    let sre = parse_sre_command(self, false).invert()?.unwrap();
                     commands.push(sre);
                     self.next_tok();
                     self.skip_space(true);
@@ -961,7 +983,7 @@ impl Parser {
             None => None,
         }
     }
-    fn skip_space(&mut self, break_at_newline: bool) -> usize {
+    pub fn skip_space(&mut self, break_at_newline: bool) -> usize {
         let mut len: usize = 0;
         while let Some(Ok(lex::Token {
             kind: lex::TokenKind::Space,
