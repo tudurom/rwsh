@@ -9,10 +9,6 @@ This is going to be a UNIX shell based around [Structural Regular Expressions][s
 [sre]: http://doc.cat-v.org/bell_labs/structural_regexps/
 [usam]: https://github.com/tudurom/usam
 
-## Issues:
-
-- [ ] In program output, lines that don't end in a newline are not shown. Probably because of `rustyline`.
-
 ## To do:
 
 See `todo/todo.txt`.
