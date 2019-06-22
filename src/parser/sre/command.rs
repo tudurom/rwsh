@@ -76,9 +76,9 @@ pub fn parse_command(p: &mut Parser, brace: bool) -> Result<Option<SimpleCommand
     let chr = p.next_char();
     let nr = chr.map_or(-1, arg_nr);
     let mut args = Vec::new();
-    p.lexer.borrow_mut().mode.insert(LexMode::SLASH);
-    let r = match chr {
+    match chr {
         Some(name) if nr != -1 => {
+            p.lexer.borrow_mut().mode.insert(LexMode::SLASH);
             let mut i = 0;
             while i < nr && p.peek_char() == Some('/') {
                 let arg = if i == 0 && has_regex_argument(name) {
@@ -89,6 +89,7 @@ pub fn parse_command(p: &mut Parser, brace: bool) -> Result<Option<SimpleCommand
                 args.push(arg);
                 i += 1;
             }
+            p.lexer.borrow_mut().mode.remove(LexMode::SLASH);
             if i < nr {
                 let peek = p.peek_char();
                 if peek.is_none() {
@@ -147,9 +148,7 @@ pub fn parse_command(p: &mut Parser, brace: bool) -> Result<Option<SimpleCommand
             c
         ))),
         None => Err(p.new_error("unexpected EOF when reading command".to_owned())),
-    };
-    p.lexer.borrow_mut().mode.remove(LexMode::SLASH);
-    r
+    }
 }
 
 #[cfg(test)]
