@@ -4,63 +4,25 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-        
         {
+            "name": "Debug executable",
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'rwsh'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--lib",
-                    "--package=rwsh",
-                    "--",
-                    "--test-threads 1",
-                ],
-                "filter": {
-                    "kind": "lib"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug executable 'rwsh'",
-            "cargo": {
-                "args": [
-                    "build",
-                    "--bin=rwsh",
-                    "--package=rwsh"
-                ],
-                "filter": {
-                    "kind": "bin"
-                }
-            },
+            "program": "target/debug/rwsh",
             "args": [],
             "cwd": "${workspaceFolder}",
             "terminal": "integrated",
+            "preLaunchTask": "compile executable",
         },
         {
+            "name": "Debug tests",
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'rwsh'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--bin=rwsh",
-                    "--package=rwsh"
-                ],
-                "filter": {
-                    "kind": "bin"
-                }
-            },
+            "program": "target/debug/rwsh-8a586b650f055416",
             "args": [],
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceRoot}",
             "terminal": "integrated",
+            "preLaunchTask": "compile tests"
         }
     ]
 }

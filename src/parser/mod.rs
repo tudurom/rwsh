@@ -31,7 +31,8 @@ use std::rc::Rc;
 enum WordStringReadMode {
     // Unqoted,
     SingleQuoted,
-    DoubleQuoted,
+    // The `char` is the delimiter.
+    DoubleQuoted(char),
     Parameter,
     Pattern,
 }
@@ -739,7 +740,7 @@ impl Parser {
                 }
             }
             self.lexer.borrow_mut().mode.remove(LexMode::END);
-            let pattern = match self.parse_switch_pattern() {
+            let pattern = match self.parse_word_pattern(true) {
                 Err(e) => return Some(Err(e)),
                 Ok(p) => p,
             };
@@ -765,15 +766,18 @@ impl Parser {
         Some(Ok(Command::SwitchConstruct(to_match, v)))
     }
 
-    fn parse_switch_pattern(&mut self) -> Result<Word, ParseError> {
-        self.next_tok(); // /
+    fn parse_word_pattern(&mut self, advance_closing_slash: bool) -> Result<Word, ParseError> {
+        use crate::parser::lex::TokenKind;
+        assert_eq!(self.next_tok().unwrap().unwrap().kind, TokenKind::Slash); // /
         let mut v = Vec::new();
         let mut closed = false;
 
         while let Some(c) = self.peek_char() {
             if c == '/' {
                 closed = true;
-                self.lexer.borrow_mut().input.next();
+                if advance_closing_slash {
+                    self.lexer.borrow_mut().input.next();
+                }
                 break;
             }
             let w = if c == '$' {
@@ -832,7 +836,7 @@ impl Parser {
                 }
             }
             self.lexer.borrow_mut().mode.remove(LexMode::END);
-            let pattern = match self.parse_switch_pattern() {
+            let pattern = match self.parse_word_pattern(true) {
                 Err(e) => return Some(Err(e)),
                 Ok(p) => p,
             };
@@ -870,9 +874,9 @@ impl Parser {
                     ..
                 })) = self.peek()
                 {
+                    self.next_tok();
                     let sre = parse_sre_command(self, false).invert()?.unwrap();
                     commands.push(sre);
-                    self.next_tok();
                     self.skip_space(true);
                 }
                 Some(Ok(Command::SREProgram(SRESequence(commands))))
@@ -1094,8 +1098,8 @@ impl Parser {
                             break;
                         }
                     }
-                    WordStringReadMode::DoubleQuoted => {
-                        if c == '$' || c == '"' {
+                    WordStringReadMode::DoubleQuoted(delim) => {
+                        if c == '$' || c == delim {
                             break;
                         }
                     }
@@ -1147,7 +1151,8 @@ impl Parser {
             let w = if c == '$' {
                 self.parse_word_dollar()?
             } else {
-                self.parse_word_string(WordStringReadMode::DoubleQuoted)?.0
+                self.parse_word_string(WordStringReadMode::DoubleQuoted(delim))?
+                    .0
             };
             v.push(w);
         }

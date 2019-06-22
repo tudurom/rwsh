@@ -16,7 +16,8 @@
  * along with RWSH. If not, see <http://www.gnu.org/licenses/>.
  */
 use super::{skip_whitespace, Command};
-use crate::parser::{escape, Parser, RawWord, Word};
+use crate::parser::lex::LexMode;
+use crate::parser::{Parser, Word};
 use crate::util::ParseError;
 
 fn arg_nr(name: char) -> i32 {
@@ -48,42 +49,14 @@ fn has_command_argument(name: char) -> bool {
 }
 
 #[allow(clippy::collapsible_if)]
-fn read_arg(p: &mut Parser) -> Result<String, ParseError> {
+fn read_arg(p: &mut Parser) -> Result<Word, ParseError> {
     skip_whitespace(p, true);
-    p.next_char(); // /
-    let mut s = String::new();
-    let mut escaping = false;
-    while let Some(c) = p.peek_char() {
-        if escaping {
-            escaping = false;
-            s.push(escape(c));
-        } else {
-            if c == '/' {
-                break;
-            } else if c == '\\' {
-                escaping = true;
-            } else {
-                s.push(c);
-            }
-        }
-        p.next_char();
-    }
-    if escaping {
-        Err(p.new_error("unexpected EOF while escaping".to_owned()))
-    } else {
-        Ok(s)
-    }
+    p.parse_word_delimited('/')
 }
 
-fn read_regex_arg(p: &mut Parser) -> Result<String, ParseError> {
+fn read_regex_arg(p: &mut Parser) -> Result<Word, ParseError> {
     skip_whitespace(p, true);
-    p.next_char(); // /
-    let (s, closed) = crate::parser::misc::read_regexp(&mut p.lexer.borrow_mut().input, '/');
-    if closed {
-        Ok(s)
-    } else {
-        Err(p.new_error("unexpected EOF while reading regexp".to_owned()))
-    }
+    p.parse_word_pattern(false)
 }
 
 #[derive(Debug, PartialEq)]
@@ -103,7 +76,8 @@ pub fn parse_command(p: &mut Parser, brace: bool) -> Result<Option<SimpleCommand
     let chr = p.next_char();
     let nr = chr.map_or(-1, arg_nr);
     let mut args = Vec::new();
-    match chr {
+    p.lexer.borrow_mut().mode.insert(LexMode::SLASH);
+    let r = match chr {
         Some(name) if nr != -1 => {
             let mut i = 0;
             while i < nr && p.peek_char() == Some('/') {
@@ -112,7 +86,7 @@ pub fn parse_command(p: &mut Parser, brace: bool) -> Result<Option<SimpleCommand
                 } else {
                     read_arg(p)?
                 };
-                args.push(RawWord::String(arg, true).into());
+                args.push(arg);
                 i += 1;
             }
             if i < nr {
@@ -173,7 +147,9 @@ pub fn parse_command(p: &mut Parser, brace: bool) -> Result<Option<SimpleCommand
             c
         ))),
         None => Err(p.new_error("unexpected EOF when reading command".to_owned())),
-    }
+    };
+    p.lexer.borrow_mut().mode.remove(LexMode::SLASH);
+    r
 }
 
 #[cfg(test)]
@@ -183,7 +159,7 @@ mod tests {
 
     macro_rules! word {
         ($s:expr) => {
-            RawWord::String($s.to_owned(), true).into()
+            RawWord::List(vec![RawWord::String($s.to_owned(), false).into()], true).into()
         };
     }
 
@@ -226,6 +202,7 @@ mod tests {
 
     #[test]
     fn many_string_arguments() {
+        use crate::parser::WordParameter;
         let mut p = Parser::new(new_dummy_buf(
             "Z/xd  &$\\n#@\\/xd/\\tlol    /ke.k\\//".lines(),
         ));
@@ -233,7 +210,22 @@ mod tests {
             super::parse_command(&mut p, false).unwrap().unwrap(),
             super::SimpleCommand {
                 name: 'Z',
-                args: vec![word!("xd  &$\n#@/xd"), word!("\tlol    "), word!("ke.k/"),],
+                args: vec![
+                    RawWord::List(
+                        vec![
+                            RawWord::String("xd  &".to_owned(), false).into(),
+                            RawWord::Parameter(WordParameter {
+                                name: "\n".to_owned()
+                            })
+                            .into(),
+                            RawWord::String("#@/xd".to_owned(), false).into(),
+                        ],
+                        true
+                    )
+                    .into(),
+                    word!("\tlol    "),
+                    word!("ke.k/"),
+                ],
                 command_args: vec![],
             }
         );

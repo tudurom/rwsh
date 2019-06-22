@@ -1,7 +1,7 @@
-x 2019-06-08 xd
 x 2019-06-09 Issue #1
 x 2019-06-10 String globbing
 x 2019-06-11 While
 x 2019-06-14 Switch
 x 2019-06-17 Live matching
 x 2019-06-19 Fix pipes
+x 2019-06-22 parameters in SRE commands

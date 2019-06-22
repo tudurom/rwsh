@@ -137,7 +137,12 @@ mod tests {
     use crate::tests::common::new_dummy_buf;
     macro_rules! word {
         ($s:expr) => {
-            RawWord::String($s.to_owned(), true).into()
+            RawWord::List(vec![RawWord::String($s.to_owned(), false).into()], true).into()
+        };
+    }
+    macro_rules! word_pattern {
+        ($s:expr) => {
+            RawWord::Pattern(vec![RawWord::String($s.to_owned(), false).into()]).into()
         };
     }
     #[test]
@@ -198,7 +203,7 @@ mod tests {
                     )))
                 ),
                 name: 'x',
-                string_args: vec![word!("Emacs")],
+                string_args: vec![word_pattern!("Emacs")],
                 command_args: vec![super::Command {
                     address: ComposedAddress::new(
                         SimpleAddress::Regex("/{TM}".to_owned(), false),

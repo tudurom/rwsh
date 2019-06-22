@@ -1,0 +1,20 @@
+{
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "compile tests",
+            "command": "cargo",
+            "args": [
+                "test", "--no-run"
+            ],
+            "problemMatcher": ["$rustc"]
+        },
+        {
+            "type": "shell",
+            "label": "compile executable",
+            "command": "cargo",
+            "args": ["build"],
+            "problemMatcher": ["$rustc"]
+        }
+    ]
+}

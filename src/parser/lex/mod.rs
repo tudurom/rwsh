@@ -325,7 +325,10 @@ pub fn is_clear_string_char(c: char) -> bool {
 
 pub fn is_parameter_char(c: char) -> bool {
     //c.is_alphanumeric() || c == '_'
-    c == '_' || ((is_clear_string_char(c) && !is_special_char(c)) && !c.is_ascii_punctuation())
+    c == '_'
+        || ((is_clear_string_char(c) && !is_special_char(c))
+            && !c.is_ascii_punctuation()
+            && c != '\n')
 }
 
 #[cfg(test)]
