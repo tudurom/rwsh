@@ -21,7 +21,7 @@
 pub mod address;
 pub mod commands;
 
-use crate::parser::sre::Command as SRECommand;
+use crate::parser::sre::CompleteCommand as SRECommand;
 use address::Address;
 use address::AddressResolveError;
 use std::collections::BTreeSet;

@@ -19,7 +19,7 @@
 pub mod address;
 pub mod command;
 
-use super::Parser;
+use super::{naked_word, Parser, Word};
 use crate::shell::pretty::*;
 use crate::util::ParseError;
 use address::ComposedAddress;
@@ -30,8 +30,18 @@ use address::ComposedAddress;
 pub struct Command {
     pub address: ComposedAddress,
     pub name: char,
-    pub string_args: Vec<String>,
+    pub string_args: Vec<Word>,
     pub command_args: Vec<Command>,
+    pub original_address: String,
+}
+
+#[derive(Debug, Clone)]
+/// Like a [`Command`](struct.Command.html), but with its `Word`s reduced to Strings.
+pub struct CompleteCommand {
+    pub address: ComposedAddress,
+    pub name: char,
+    pub string_args: Vec<String>,
+    pub command_args: Vec<CompleteCommand>,
     pub original_address: String,
 }
 
@@ -41,8 +51,8 @@ impl PrettyPrint for Command {
             .string_args
             .iter()
             .map(|s| PrettyTree {
-                text: format!("string arg: {}", s),
-                children: vec![],
+                text: "string arg".to_owned(),
+                children: naked_word(s.clone()).pretty_print().children,
             })
             .collect::<Vec<_>>();
         let mut command_args = self
@@ -84,7 +94,7 @@ impl Command {
     pub fn new(
         address: ComposedAddress,
         name: char,
-        string_args: Vec<String>,
+        string_args: Vec<Word>,
         command_args: Vec<Command>,
         original_address: String,
     ) -> Command {
@@ -123,8 +133,13 @@ pub fn parse_command(p: &mut Parser, brace: bool) -> Result<Option<Command>, Par
 #[cfg(test)]
 mod tests {
     use crate::parser::sre::address::{ComposedAddress, SimpleAddress};
-    use crate::parser::Parser;
+    use crate::parser::{Parser, RawWord};
     use crate::tests::common::new_dummy_buf;
+    macro_rules! word {
+        ($s:expr) => {
+            RawWord::String($s.to_owned(), true).into()
+        };
+    }
     #[test]
     fn smoke() {
         let mut p = Parser::new(new_dummy_buf(
@@ -139,7 +154,7 @@ mod tests {
                     None
                 ),
                 name: 'a',
-                string_args: vec!["else".to_owned()],
+                string_args: vec![word!("else")],
                 command_args: vec![],
                 original_address: String::new(),
             }
@@ -183,7 +198,7 @@ mod tests {
                     )))
                 ),
                 name: 'x',
-                string_args: vec!["Emacs".to_owned()],
+                string_args: vec![word!("Emacs")],
                 command_args: vec![super::Command {
                     address: ComposedAddress::new(
                         SimpleAddress::Regex("/{TM}".to_owned(), false),

@@ -16,7 +16,7 @@
  * along with RWSH. If not, see <http://www.gnu.org/licenses/>.
  */
 use super::{skip_whitespace, Command};
-use crate::parser::{escape, Parser};
+use crate::parser::{escape, Parser, RawWord, Word};
 use crate::util::ParseError;
 
 fn arg_nr(name: char) -> i32 {
@@ -92,7 +92,7 @@ fn read_regex_arg(p: &mut Parser) -> Result<String, ParseError> {
 /// that do an action (the command) based on a condition.
 pub struct SimpleCommand {
     pub name: char,
-    pub args: Vec<String>,
+    pub args: Vec<Word>,
     pub command_args: Vec<Command>,
 }
 
@@ -112,7 +112,7 @@ pub fn parse_command(p: &mut Parser, brace: bool) -> Result<Option<SimpleCommand
                 } else {
                     read_arg(p)?
                 };
-                args.push(arg);
+                args.push(RawWord::String(arg, true).into());
                 i += 1;
             }
             if i < nr {
@@ -178,8 +178,14 @@ pub fn parse_command(p: &mut Parser, brace: bool) -> Result<Option<SimpleCommand
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::Parser;
+    use crate::parser::{Parser, RawWord};
     use crate::tests::common::new_dummy_buf;
+
+    macro_rules! word {
+        ($s:expr) => {
+            RawWord::String($s.to_owned(), true).into()
+        };
+    }
 
     #[test]
     fn smoke() {
@@ -199,7 +205,7 @@ mod tests {
                 .unwrap(),
             super::SimpleCommand {
                 name: 'a',
-                args: vec!["xd".to_owned()],
+                args: vec![word!("xd")],
                 command_args: vec![],
             }
         );
@@ -227,11 +233,7 @@ mod tests {
             super::parse_command(&mut p, false).unwrap().unwrap(),
             super::SimpleCommand {
                 name: 'Z',
-                args: vec![
-                    "xd  &$\n#@/xd".to_owned(),
-                    "\tlol    ".to_owned(),
-                    "ke.k/".to_owned()
-                ],
+                args: vec![word!("xd  &$\n#@/xd"), word!("\tlol    "), word!("ke.k/"),],
                 command_args: vec![],
             }
         );

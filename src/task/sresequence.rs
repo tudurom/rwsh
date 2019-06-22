@@ -17,6 +17,7 @@
  */
 use super::*;
 use crate::parser;
+use crate::parser::sre::{Command, CompleteCommand};
 use crate::shell::{Context, Process};
 use crate::sre::{Buffer, Invocation};
 use nix::unistd;
@@ -25,15 +26,17 @@ use std::io::{stdin, stdout};
 use std::rc::Rc;
 
 pub struct SRESequence {
-    seq: parser::SRESequence,
+    ast: parser::SRESequence,
+    completed: Vec<CompleteCommand>,
     started: bool,
     process: Option<Rc<RefCell<Process>>>,
 }
 
 impl SRESequence {
-    pub fn new(seq: parser::SRESequence) -> Self {
+    pub fn new(ast: parser::SRESequence) -> Self {
         SRESequence {
-            seq,
+            ast,
+            completed: Vec::new(),
             started: false,
             process: None,
         }
@@ -42,7 +45,7 @@ impl SRESequence {
     fn do_exec(&self) {
         let mut prev_address = None;
         let mut buf = Buffer::new(stdin()).unwrap();
-        for prog in &self.seq.0 {
+        for prog in &self.completed {
             let inv = Invocation::new(prog.clone(), &buf, prev_address).unwrap();
             let mut out = stdout();
             let addr = inv.execute(&mut out, &mut buf).unwrap();
@@ -69,12 +72,37 @@ impl SRESequence {
             }
         }
     }
+
+    fn complete_command(c: Command) -> CompleteCommand {
+        let string_args = c
+            .string_args
+            .iter()
+            .map(|w| super::word::word_to_str(w.clone()))
+            .collect::<Vec<_>>();
+        let command_args = if !c.command_args.is_empty() {
+            c.command_args
+                .iter()
+                .map(|cmd| Self::complete_command(cmd.clone()))
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        CompleteCommand {
+            address: c.address,
+            name: c.name,
+            string_args,
+            command_args,
+            original_address: c.original_address,
+        }
+    }
 }
 
 impl TaskImpl for SRESequence {
     fn poll(&mut self, ctx: &mut Context) -> Result<TaskStatus, String> {
         ctx.state.if_condition_ok = None;
         if !self.started {
+            self.completed
+                .extend(self.ast.0.iter().map(|c| Self::complete_command(c.clone())));
             self.process_start(ctx)?;
             self.started = true;
         }

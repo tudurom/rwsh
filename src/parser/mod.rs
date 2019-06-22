@@ -1133,15 +1133,15 @@ impl Parser {
         Ok(self.parse_word_string(WordStringReadMode::SingleQuoted)?.0)
     }
 
-    fn parse_word_double_quoted(&mut self) -> Result<Word, ParseError> {
-        self.next_tok(); // "
+    /// Parses a delimited word without `next()`-ing the closing delimiter.
+    fn parse_word_delimited(&mut self, delim: char) -> Result<Word, ParseError> {
+        self.next_tok(); // open delimiter
         let mut v = Vec::new();
         let mut closed = false;
 
         while let Some(c) = self.peek_char() {
-            if c == '"' {
+            if c == delim {
                 closed = true;
-                self.lexer.borrow_mut().input.next();
                 break;
             }
             let w = if c == '$' {
@@ -1156,10 +1156,16 @@ impl Parser {
                 .lexer
                 .borrow_mut()
                 .input
-                .new_error("expected '\"', got EOF".to_owned()))
+                .new_error(format!("expected '{}', got EOF", delim)))
         } else {
             Ok(RawWord::List(v, true).into())
         }
+    }
+
+    fn parse_word_double_quoted(&mut self) -> Result<Word, ParseError> {
+        let r = self.parse_word_delimited('"')?;
+        self.lexer.borrow_mut().input.next();
+        Ok(r)
     }
 
     fn parse_word_dollar(&mut self) -> Result<Word, ParseError> {
@@ -1174,6 +1180,17 @@ impl Parser {
     }
 
     fn parse_word_parameter(&mut self) -> Result<Word, ParseError> {
+        #[allow(clippy::single_match)]
+        match self.peek_char() {
+            Some('?') => {
+                self.next_char();
+                return Ok(RawWord::Parameter(WordParameter {
+                    name: "?".to_owned(),
+                })
+                .into());
+            }
+            _ => {}
+        }
         let (w, len) = self.parse_word_string(WordStringReadMode::Parameter)?;
         if len == 0 {
             Ok(RawWord::Parameter(WordParameter {

@@ -134,8 +134,28 @@ impl Task {
         Task::new(Box::new(tl))
     }
 
-    pub fn new_from_sre_sequence(seq: parser::SRESequence) -> Self {
-        Task::new(Box::new(SRESequence::new(seq)))
+    pub fn new_from_sre_sequence(seq: parser::SRESequence, top_level: bool) -> Self {
+        let mut tl = TaskList::new();
+        for sre in &seq.0 {
+            tl.children.extend(sre.string_args.iter().map(|arg| {
+                if let parser::RawWord::Parameter(_) = arg.borrow().deref() {
+                    Self::new_from_word(arg.clone(), false, true)
+                } else {
+                    Self::new_from_word(arg.clone(), false, false)
+                }
+            }));
+            if !sre.command_args.is_empty() {
+                tl.children.push(Self::new_from_sre_sequence(
+                    parser::SRESequence(sre.command_args.clone()),
+                    false,
+                ));
+            }
+        }
+        if top_level {
+            tl.children.push(Task::new(Box::new(SRESequence::new(seq))));
+        }
+
+        Task::new(Box::new(tl))
     }
 
     pub fn new_from_if(condition: parser::Program, body: parser::Program) -> Self {
@@ -185,7 +205,7 @@ impl Task {
     pub fn new_from_command(pi: parser::Command) -> Self {
         match pi {
             parser::Command::SimpleCommand(c) => Self::new_from_simple_command(c),
-            parser::Command::SREProgram(seq) => Self::new_from_sre_sequence(seq),
+            parser::Command::SREProgram(seq) => Self::new_from_sre_sequence(seq, true),
             parser::Command::BraceGroup(arr) => Self::new_from_command_lists(arr),
             parser::Command::IfConstruct(condition, body) => Self::new_from_if(condition, body),
             parser::Command::ElseConstruct(body) => Self::new_from_else(body),
