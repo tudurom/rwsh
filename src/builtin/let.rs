@@ -17,38 +17,72 @@
  */
 use crate::shell::Context;
 use crate::shell::Var;
+use getopts::Options;
 
 fn is_special_var(s: &str) -> bool {
     s == "" || s == "?"
 }
 
+fn print_usage(program: &str, opts: Options) {
+    let brief = format!(
+        "Usage: {} [options] key value\n       {0} [options] -e key",
+        program
+    );
+    eprint!("{}", opts.usage(&brief));
+}
+
 pub fn r#let(ctx: &mut Context, args: Vec<&str>) -> i32 {
-    if args.len() != 3 {
-        eprintln!("let: Usage:\nlet <key> <value>");
-        return 1;
+    let mut opts = Options::new();
+    opts.optflag("x", "", "export variable");
+    opts.optflag("e", "", "erase variable");
+    let matches = match opts.parse(args.iter()) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("let: {}", e);
+            print_usage(args[0], opts);
+            return 2;
+        }
+    };
+    if matches.free.len() < 2 {
+        print_usage(args[0], opts);
+        return 2;
     }
 
-    if is_special_var(args[1]) {
+    if is_special_var(&matches.free[1]) {
         eprintln!("let: cannot change special variable");
         return 1;
     }
 
-    ctx.state
-        .set_var(args[1].to_owned(), Var::String(args[2].to_owned()));
-    0
-}
-
-pub fn unset(ctx: &mut Context, args: Vec<&str>) -> i32 {
-    if args.len() != 2 {
-        eprintln!("unset: Usage:\nunset <key>");
-        return 1;
+    macro_rules! wrong {
+        ($nr:expr) => {
+            if matches.free.len() != $nr {
+                print_usage(args[0], opts);
+                return 2;
+            }
+        };
     }
 
-    if is_special_var(args[1]) {
-        eprintln!("unset: cannot change special variable");
-        return 1;
+    if matches.opt_present("x") {
+        if matches.opt_present("e") {
+            wrong!(2);
+            ctx.state.unexport_var(matches.free[1].clone());
+        } else {
+            wrong!(3);
+            ctx.state
+                .export_var(matches.free[1].clone(), matches.free[2].clone());
+        }
+    } else {
+        if matches.opt_present("e") {
+            wrong!(2);
+            ctx.state.vars.remove(&matches.free[1]);
+        } else {
+            wrong!(3);
+            ctx.state.vars.insert(
+                matches.free[1].clone(),
+                Var::String(matches.free[2].clone()),
+            );
+        }
     }
 
-    ctx.state.vars.remove(args[1]);
     0
 }

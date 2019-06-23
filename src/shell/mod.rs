@@ -64,6 +64,9 @@ pub struct State {
     pub config: Config,
     pub process: Option<Rc<RefCell<Process>>>,
     pub parser: Rc<RefCell<Parser>>,
+
+    exported_vars: HashMap<String, String>,
+    pub computed_exported_vars: Vec<String>,
 }
 
 fn read_vars() -> HashMap<String, Var> {
@@ -76,16 +79,25 @@ fn read_vars() -> HashMap<String, Var> {
 
 impl State {
     pub fn new(config: Config, parser: Rc<RefCell<Parser>>) -> State {
-        State {
+        let vars = read_vars();
+        let mut s = State {
             exit: -1,
             last_status: 0,
             processes: Vec::new(),
-            vars: read_vars(),
+            vars: vars.clone(),
             if_condition_ok: None,
             config,
             process: None,
             parser,
-        }
+
+            exported_vars: vars
+                .iter()
+                .map(|(k, v)| (k.clone(), v.to_string()))
+                .collect(),
+            computed_exported_vars: Vec::new(),
+        };
+        s.compute_exported_vars();
+        s
     }
 
     pub fn new_process(&mut self, pid: Pid) -> Rc<RefCell<Process>> {
@@ -116,16 +128,29 @@ impl State {
         }
     }
 
-    pub fn set_var(&mut self, key: String, value: Var) {
-        match &value {
-            Var::String(s) => {
-                if s.is_empty() && self.vars.contains_key(&key) {
-                    self.vars.remove(&key);
-                } else {
-                    self.vars.insert(key, value);
-                }
-            }
-        }
+    fn compute_exported_vars(&mut self) {
+        self.computed_exported_vars = self
+            .exported_vars
+            .iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect();
+    }
+
+    pub fn export_var(&mut self, key: String, value: String) {
+        self.exported_vars.insert(key, value);
+        self.compute_exported_vars();
+    }
+
+    pub fn unexport_var(&mut self, key: String) {
+        self.exported_vars.remove(&key);
+        self.compute_exported_vars()
+    }
+
+    pub fn get_var(&self, key: &str) -> Option<String> {
+        self.vars
+            .get(key)
+            .map(|v| v.to_string())
+            .or(self.exported_vars.get(key).map(|v| v.clone()))
     }
 
     pub fn fork(&mut self) -> Result<Fork, Box<Error>> {
@@ -180,7 +205,7 @@ impl<'a> Context<'a> {
         match name {
             "" => Some("$".to_owned()),
             "?" => Some(self.state.last_status.to_string()),
-            _ => self.state.vars.get(name).map(ToString::to_string),
+            _ => self.state.get_var(name),
         }
     }
 }

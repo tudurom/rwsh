@@ -15,29 +15,46 @@
  * You should have received a copy of the GNU General Public License
  * along with RWSH. If not, see <http://www.gnu.org/licenses/>.
  */
-use clap::{App, Arg};
+use getopts::Options;
 use nix::unistd;
 use rwsh::shell::{Config, Shell};
 use rwsh::util::FileLineReader;
+use std::env;
 use std::fs::File;
 use std::io::stdin;
+use std::process::exit;
+
+fn print_usage(program: &str, opts: Options) {
+    let brief = format!(
+        "rwsh v{}\nUsage: {} [options] [file]",
+        env!("CARGO_PKG_VERSION"),
+        program
+    );
+    eprint!("{}", opts.usage(&brief));
+}
 
 fn main() {
-    let matches = App::new("rwsh")
-        .version("v0.0.0")
-        .author("Tudor-Ioan Roman")
-        .arg(Arg::with_name("input").help("input script").index(1))
-        .arg(
-            Arg::with_name("n")
-                .short("n")
-                .help("pretty print AST instead of executing"),
-        )
-        .get_matches();
+    let args = env::args().collect::<Vec<_>>();
+    let mut opts = Options::new();
+    opts.optflag("n", "", "pretty print AST instead of executing");
+    opts.optflag("h", "help", "print this help message");
+    let matches = match opts.parse(args.iter()) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("rwsh: {}", e);
+            print_usage(&args[0], opts);
+            exit(2);
+        }
+    };
+    if matches.opt_present("h") {
+        print_usage(&matches.free[0], opts);
+        return;
+    }
 
     let cfg = Config {
-        pretty_print: matches.is_present("n"),
+        pretty_print: matches.opt_present("n"),
     };
-    if let Some(input) = matches.value_of("input") {
+    if let Some(input) = matches.free.get(1) {
         Shell::new(
             Box::new(FileLineReader::new(File::open(input).unwrap()).unwrap()),
             cfg,

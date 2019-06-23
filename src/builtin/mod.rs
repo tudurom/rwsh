@@ -27,7 +27,7 @@ use self::calc::calc;
 use cd::cd;
 use eval::eval;
 use exit::exit;
-use r#let::{r#let, unset};
+use r#let::r#let;
 use r#true::{r#false, r#true};
 
 /// A built-in command prototype.
@@ -51,7 +51,7 @@ macro_rules! b {
         }
     };
 }
-static BULTINS: [Builtin; 8] = [
+static BULTINS: [Builtin; 7] = [
     // keep sorted pls
     b!(calc),
     b!(cd),
@@ -69,7 +69,6 @@ static BULTINS: [Builtin; 8] = [
         name: "true",
         func: r#true,
     },
-    b!(unset),
 ];
 
 /// Find a built-in function by name.
