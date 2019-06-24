@@ -52,32 +52,20 @@ impl Command {
         }
     }
 
-    fn do_exec(&self, env: &Vec<String>) {
-        if let Err(e) = unistd::execvpe(
-            &os2c(OsStr::new(&self.args[0].as_str())),
-            self.args
-                .iter()
-                .map(|a| os2c(OsStr::new(&a)))
-                .collect::<Vec<CString>>()
-                .as_slice(),
-            env.iter()
-                .map(|a| os2c(OsStr::new(&a)))
-                .collect::<Vec<CString>>()
-                .as_slice(),
-        ) {
-            eprintln!("{}: {}", self.args[0], e);
-            std::process::exit(127);
-        }
-    }
-
     fn process_start(&mut self, ctx: &mut Context) -> Result<(), String> {
-        if ctx.in_pipe {
-            self.do_exec(&ctx.state.computed_exported_vars);
-            // does not return
-        }
         match unistd::fork().map_err(|e| format!("failed to fork: {}", e))? {
             unistd::ForkResult::Child => {
-                self.do_exec(&ctx.state.computed_exported_vars);
+                if let Err(e) = unistd::execvp(
+                    &os2c(OsStr::new(&self.args[0].as_str())),
+                    self.args
+                        .iter()
+                        .map(|a| os2c(OsStr::new(&a)))
+                        .collect::<Vec<CString>>()
+                        .as_slice(),
+                ) {
+                    eprintln!("{}: {}", self.args[0], e);
+                    std::process::exit(127);
+                }
                 Ok(())
             }
             unistd::ForkResult::Parent { child: pid, .. } => {
