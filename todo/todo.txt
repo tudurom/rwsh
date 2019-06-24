@@ -7,3 +7,4 @@ Job control
 (B) fix #2
 execute commands from sre
 (C) ! builtin
+(B) fix #3

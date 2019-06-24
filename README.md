@@ -22,8 +22,10 @@ See `todo/todo.txt`.
 	- [ ] Variable and command substitution (with capture group values)
 	    - [ ] In addresses
 		- [x] In command parameters
+    - [ ] Shell commands in SRE
 - [ ] Shell stuff:
     - [x] Load scripts
+    - [ ] `||`, `&&`, `!`
 	- [ ] Redirection
     - [ ] Job control (God have mercy)
         - [ ] Handle signals
@@ -37,7 +39,7 @@ See `todo/todo.txt`.
     - [x] If-else
     - [x] While
     - [ ] For
-	    - [ ] String globbing
+	    - [x] String globbing
     - [x] Switch
 	- [x] Matches (awk-like pattern list)
 - [ ] Functions
