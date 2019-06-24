@@ -21,7 +21,7 @@ See `todo/todo.txt`.
     - [x] Loops
 	- [ ] Variable and command substitution (with capture group values)
 	    - [ ] In addresses
-		- [ ] In command parameters
+		- [x] In command parameters
 - [ ] Shell stuff:
     - [x] Load scripts
 	- [ ] Redirection

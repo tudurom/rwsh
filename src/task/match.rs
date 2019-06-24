@@ -18,15 +18,24 @@
 use super::word::word_to_str;
 use super::*;
 use crate::parser;
+use crate::shell::Var;
 use regex::Regex;
+use std::collections::{HashMap, VecDeque};
 use std::io::{stdin, BufRead, BufReader, ErrorKind, Stdin};
+
+struct ExecContext {
+    int_captures: Vec<String>,
+    string_captures: HashMap<String, String>,
+}
 
 struct MatchItem {
     regex: Regex,
     offset: usize,
     task: Task,
-    to_exec: usize,
+    to_exec: VecDeque<ExecContext>,
     prog: parser::Program,
+    named_capture_groups: Vec<String>,
+    started: bool,
 }
 
 pub struct Match {
@@ -63,12 +72,19 @@ impl Match {
                 let pattern = word_to_str(pattern.clone());
                 let task = Task::new_from_command_lists(prog.0.clone(), false);
                 let regex = Regex::new(&pattern).unwrap();
+                let named_capture_groups = regex
+                    .capture_names()
+                    .filter(|v| v.is_some())
+                    .map(|v| v.unwrap().to_owned())
+                    .collect();
                 MatchItem {
                     regex,
                     offset: 0,
                     task,
-                    to_exec: 0,
+                    to_exec: VecDeque::new(),
                     prog: self.ast[i].1.clone(),
+                    named_capture_groups,
+                    started: false,
                 }
             })
             .collect();
@@ -85,7 +101,7 @@ impl TaskImpl for Match {
         }
         let stdin = stdin();
         while ctx.state.exit == -1 {
-            match self.items.iter_mut().find(|item| item.to_exec > 0) {
+            match self.items.iter_mut().find(|item| item.to_exec.len() > 0) {
                 None => {
                     if self.finished {
                         return self.last_body_status.clone();
@@ -105,9 +121,27 @@ impl TaskImpl for Match {
                     for item in self.items.iter_mut() {
                         let s = String::from_utf8_lossy(&self.buf[item.offset..]);
                         let mut to_add = 0;
-                        for m in item.regex.find_iter(&s) {
-                            item.to_exec += 1;
-                            to_add = m.end();
+                        for m in item.regex.captures_iter(&s) {
+                            item.to_exec.push_back(ExecContext {
+                                int_captures: m
+                                    .iter()
+                                    .map(|x| x.map_or(String::new(), |val| val.as_str().to_owned()))
+                                    .collect(),
+                                string_captures: item
+                                    .named_capture_groups
+                                    .iter()
+                                    .map(|name| {
+                                        (
+                                            name.clone(),
+                                            m.name(name).map_or(String::new(), |val| {
+                                                val.as_str().to_owned()
+                                            }),
+                                        )
+                                    })
+                                    .collect(),
+                            });
+                            to_add = m.get(0).unwrap().end();
+                            dbg!(&to_add);
                         }
                         item.offset += to_add;
                     }
@@ -115,13 +149,53 @@ impl TaskImpl for Match {
                     return Ok(TaskStatus::Wait);
                 }
                 Some(item) => {
+                    if !item.started {
+                        for (i, val) in item
+                            .to_exec
+                            .front()
+                            .as_ref()
+                            .unwrap()
+                            .int_captures
+                            .iter()
+                            .enumerate()
+                        {
+                            ctx.state
+                                .set_var(i.to_string(), Var::String(val.clone()), true);
+                        }
+                        for (name, val) in item
+                            .to_exec
+                            .front()
+                            .as_ref()
+                            .unwrap()
+                            .string_captures
+                            .iter()
+                        {
+                            ctx.state
+                                .set_var(name.clone(), Var::String(val.clone()), true);
+                        }
+                        item.started = true;
+                    }
                     let body_status = item.task.poll(ctx)?;
                     if let TaskStatus::Wait = body_status {
                         return Ok(TaskStatus::Wait);
                     } else {
                         self.last_body_status = Ok(body_status);
                         item.task = Task::new_from_command_lists(item.prog.0.clone(), false);
-                        item.to_exec -= 1;
+                        for i in 0..item.to_exec.front().as_ref().unwrap().int_captures.len() {
+                            ctx.state.remove_var(&i.to_string());
+                        }
+                        for name in item
+                            .to_exec
+                            .front()
+                            .as_ref()
+                            .unwrap()
+                            .string_captures
+                            .keys()
+                        {
+                            ctx.state.remove_var(name);
+                        }
+                        item.started = false;
+                        item.to_exec.pop_front();
                     }
                 }
             }

@@ -18,19 +18,28 @@
 use super::word::word_to_str;
 use super::*;
 use crate::parser;
-use crate::shell::Context;
-use regex::RegexSet;
+use crate::shell::{Context,Var};
+use regex::{Regex, RegexSet};
+use std::collections::HashMap;
+
+struct ExecContext {
+    index: usize,
+    int_captures: Vec<String>,
+    string_captures: HashMap<String, String>,
+    started: bool,
+    finished: bool,
+}
 
 enum ItemIndex {
     Unknown,
-    Index(usize),
+    Index(ExecContext),
     None,
 }
 
 impl ItemIndex {
-    fn index(&self) -> usize {
-        if let ItemIndex::Index(i) = self {
-            *i
+    fn index(&mut self) -> &mut ExecContext {
+        if let ItemIndex::Index(ref mut ctx) = self {
+            ctx
         } else {
             panic!()
         }
@@ -43,6 +52,8 @@ pub struct Switch {
     items: Vec<Task>,
     patterns: Vec<String>,
     regex_set: Option<RegexSet>,
+    regexes: Vec<Regex>,
+    named_capture_groups: Vec<Vec<String>>,
 
     initialized: bool,
     index: ItemIndex,
@@ -58,11 +69,20 @@ impl Switch {
             initialized: false,
             index: ItemIndex::Unknown,
             regex_set: None,
+            regexes: Vec::new(),
+            named_capture_groups: Vec::new(),
         }
     }
 
     fn initialize(&mut self) -> Result<(), String> {
         self.to_match = word_to_str(self.ast.0.clone());
+
+        let len = self.ast.1.len();
+        self.items.reserve(len);
+        self.patterns.reserve(len);
+        self.regexes.reserve(len);
+        self.named_capture_groups.reserve(len);
+
         self.items.extend(
             self.ast
                 .1
@@ -73,6 +93,15 @@ impl Switch {
             .extend(self.ast.1.iter().map(|(p, _)| word_to_str(p.clone())));
         self.regex_set =
             Some(RegexSet::new(self.patterns.iter()).map_err(|e| format!("regex error: {}", e))?);
+        self.regexes
+            .extend(self.patterns.iter().map(|p| Regex::new(p).unwrap()));
+        self.named_capture_groups
+            .extend(self.regexes.iter().map(|re| {
+                re.capture_names()
+                    .filter(|v| v.is_some())
+                    .map(|v| v.unwrap().to_owned())
+                    .collect()
+            }));
         self.initialized = true;
         Ok(())
     }
@@ -87,13 +116,48 @@ impl TaskImpl for Switch {
             let matches = self.regex_set.as_ref().unwrap().matches(&self.to_match);
             match matches.into_iter().next() {
                 None => self.index = ItemIndex::None,
-                Some(i) => self.index = ItemIndex::Index(i),
+                Some(i) => {
+                    let cap = self.regexes[i].captures(&self.to_match).unwrap();
+                    self.index = ItemIndex::Index(ExecContext{
+                        index: i,
+                        int_captures: cap.iter().map(|x| x.map_or(String::new(), |val| val.as_str().to_owned())).collect(),
+                        string_captures: self.named_capture_groups[i].iter().map(|name| {
+                            (name.clone(), cap.name(name).map_or(String::new(), |val| val.as_str().to_owned()))
+                        }).collect(),
+                        started: false,
+                        finished: false,
+                    });
+                }
             }
         }
         if let ItemIndex::None = self.index {
             Ok(TaskStatus::Success(0))
         } else {
-            self.items[self.index.index()].poll(ctx)
+            let cur = self.index.index();
+            if !cur.started {
+                for (i, val) in cur.int_captures.iter().enumerate() {
+                    ctx.state.set_var(i.to_string(), Var::String(val.clone()), true);
+                }
+                for (name, val) in cur.string_captures.iter() {
+                    ctx.state.set_var(name.clone(), Var::String(val.clone()), true);
+                }
+                cur.started = true;
+            }
+            let body_status = self.items[cur.index].poll(ctx)?;
+            if let TaskStatus::Wait = body_status {
+                Ok(TaskStatus::Wait)
+            } else {
+                if !cur.finished {
+                    for i in 0..cur.int_captures.len() {
+                        ctx.state.remove_var(&i.to_string());
+                    }
+                    for name in cur.string_captures.keys() {
+                        ctx.state.remove_var(name);
+                    }
+                    cur.finished = true;
+                }
+                Ok(body_status)
+            }
         }
     }
 }
