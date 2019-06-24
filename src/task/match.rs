@@ -141,7 +141,6 @@ impl TaskImpl for Match {
                                     .collect(),
                             });
                             to_add = m.get(0).unwrap().end();
-                            dbg!(&to_add);
                         }
                         item.offset += to_add;
                     }
