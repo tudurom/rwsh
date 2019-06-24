@@ -98,7 +98,7 @@ impl Task {
 
     pub fn new_from_word(word: parser::Word, expand_tilde: bool, is_pattern: bool) -> Self {
         if let parser::RawWord::List(children, double_quoted) = word.borrow().deref() {
-            let mut tl = TaskList::new();
+            let mut tl = TaskList::new(false);
             for child in children {
                 tl.children.push(Self::new_from_word(
                     child.clone(),
@@ -108,7 +108,7 @@ impl Task {
             }
             return Task::new(Box::new(tl));
         } else if let parser::RawWord::Pattern(children) = word.borrow().deref() {
-            let mut tl = TaskList::new();
+            let mut tl = TaskList::new(false);
             for child in children {
                 tl.children
                     .push(Self::new_from_word(child.clone(), expand_tilde, true));
@@ -121,7 +121,7 @@ impl Task {
     }
 
     pub fn new_from_simple_command(c: parser::SimpleCommand) -> Self {
-        let mut tl = TaskList::new();
+        let mut tl = TaskList::new(false);
         let sc = c.with_deep_copied_word();
         tl.children
             .push(Self::new_from_word(sc.0.clone(), true, false));
@@ -135,7 +135,7 @@ impl Task {
     }
 
     pub fn new_from_sre_sequence(seq: parser::SRESequence, top_level: bool) -> Self {
-        let mut tl = TaskList::new();
+        let mut tl = TaskList::new(true);
         for sre in &seq.0 {
             tl.children.extend(sre.string_args.iter().map(|arg| {
                 if let parser::RawWord::Parameter(_) = arg.borrow().deref() {
@@ -160,14 +160,14 @@ impl Task {
 
     pub fn new_from_if(condition: parser::Program, body: parser::Program) -> Self {
         Task::new(Box::new(IfConstruct::new(
-            Self::new_from_command_lists(condition.0),
-            Self::new_from_command_lists(body.0),
+            Self::new_from_command_lists(condition.0, true),
+            Self::new_from_command_lists(body.0, true),
         )))
     }
 
     pub fn new_from_else(body: parser::Program) -> Self {
         Task::new(Box::new(ElseConstruct::new(Self::new_from_command_lists(
-            body.0,
+            body.0, true,
         ))))
     }
 
@@ -179,7 +179,7 @@ impl Task {
         to_match: parser::Word,
         items: Vec<(parser::Word, parser::Program)>,
     ) -> Self {
-        let mut tl = TaskList::new();
+        let mut tl = TaskList::new(true);
         tl.children
             .push(Self::new_from_word(to_match.clone(), false, true));
         for item in &items {
@@ -193,7 +193,7 @@ impl Task {
     }
 
     pub fn new_from_match(items: Vec<(parser::Word, parser::Program)>) -> Self {
-        let mut tl = TaskList::new();
+        let mut tl = TaskList::new(true);
         for item in &items {
             tl.children
                 .push(Self::new_from_word(item.0.clone(), false, true));
@@ -206,7 +206,7 @@ impl Task {
         match pi {
             parser::Command::SimpleCommand(c) => Self::new_from_simple_command(c),
             parser::Command::SREProgram(seq) => Self::new_from_sre_sequence(seq, true),
-            parser::Command::BraceGroup(arr) => Self::new_from_command_lists(arr),
+            parser::Command::BraceGroup(arr) => Self::new_from_command_lists(arr, true),
             parser::Command::IfConstruct(condition, body) => Self::new_from_if(condition, body),
             parser::Command::ElseConstruct(body) => Self::new_from_else(body),
             parser::Command::WhileConstruct(condition, body) => {
@@ -238,8 +238,8 @@ impl Task {
         }
     }
 
-    pub fn new_from_command_lists(v: Vec<parser::CommandList>) -> Self {
-        let mut tl = TaskList::new();
+    pub fn new_from_command_lists(v: Vec<parser::CommandList>, has_scope: bool) -> Self {
+        let mut tl = TaskList::new(has_scope);
 
         for cl in v {
             let child = Self::new_from_node(cl.0);

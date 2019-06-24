@@ -58,14 +58,15 @@ pub struct Config {
 pub struct State {
     pub exit: i32,
     pub processes: Vec<Rc<RefCell<Process>>>,
-    pub vars: HashMap<String, Var>,
+    pub scope: u32,
+    pub vars: HashMap<String, Vec<(Var, u32)>>,
     pub last_status: i32,
     pub if_condition_ok: Option<bool>,
     pub config: Config,
     pub process: Option<Rc<RefCell<Process>>>,
     pub parser: Rc<RefCell<Parser>>,
 
-    exported_vars: HashMap<String, String>,
+    pub exported_vars: HashMap<String, String>,
     pub computed_exported_vars: Vec<String>,
 }
 
@@ -84,7 +85,11 @@ impl State {
             exit: -1,
             last_status: 0,
             processes: Vec::new(),
-            vars: vars.clone(),
+            scope: 0,
+            vars: vars
+                .iter()
+                .map(|(k, v)| (k.clone(), vec![(v.clone(), 0)]))
+                .collect(),
             if_condition_ok: None,
             config,
             process: None,
@@ -136,20 +141,64 @@ impl State {
             .collect();
     }
 
+    /// Puts a value in the exported set.
+    /// Values in the exported set must be explicitly set.
+    /// Assigning a new value to a variable that has the same name
+    /// as the exported variable does not change the exported variable's value.
+    /// They are two, independent variables.
     pub fn export_var(&mut self, key: String, value: String) {
         self.exported_vars.insert(key, value);
         self.compute_exported_vars();
     }
 
-    pub fn unexport_var(&mut self, key: String) {
-        self.exported_vars.remove(&key);
+    /// Removes a value from the exported set.
+    /// If there's a normal variable with the same name, it will remain available.
+    pub fn unexport_var(&mut self, key: &str) {
+        self.exported_vars.remove(key);
         self.compute_exported_vars()
+    }
+
+    /// Sets a variable's name. The variable is created in the current scope if it doesn't exit,
+    /// or if `create_new` is true. If `create_new` is `false`, and the variable's scope is a parent
+    /// of the current scope, the variable's value will be set to `value`.
+    /// If `create_new` is `true` and the variable already exists in the scope, it will not be created again either.
+    /// Only its value will change.
+    pub fn set_var(&mut self, key: String, value: Var, mut create_new: bool) {
+        if !self.vars.contains_key(&key) {
+            self.vars.insert(key.clone(), Vec::new());
+        }
+        let v = self.vars.get_mut(&key).unwrap();
+
+        create_new = create_new || v.is_empty();
+        // don't put variables with the same scope on the stack
+        if !v.is_empty() && v.last().unwrap().1 == self.scope {
+            create_new = false;
+        }
+        if create_new {
+            v.push((value, self.scope));
+        } else {
+            let scope = v.last().unwrap().1;
+            *v.last_mut().unwrap() = (value, scope);
+        }
+    }
+
+    /// Removes the variable. If the variable was created in a scope other than the root,
+    /// it is only masked: a new variable with the same name but in the current scope
+    /// is created with a null value.
+    pub fn remove_var(&mut self, key: &str) {
+        if self.scope == 0 {
+            self.vars.remove(key);
+        } else if self.vars.contains_key(key) {
+            let v = self.vars.get_mut(key).unwrap();
+            assert!(v.last().unwrap().1 <= self.scope);
+            self.set_var(key.to_owned(), Var::String(String::new()), true);
+        }
     }
 
     pub fn get_var(&self, key: &str) -> Option<String> {
         self.vars
             .get(key)
-            .map(|v| v.to_string())
+            .map(|vec| vec.last().unwrap().0.to_string())
             .or(self.exported_vars.get(key).map(|v| v.clone()))
     }
 
@@ -167,6 +216,28 @@ impl State {
                 Ok(Fork::Parent(self.process.as_ref().unwrap().clone()))
             }
         }
+    }
+
+    pub fn begin_scope(&mut self) {
+        self.scope += 1;
+    }
+
+    pub fn end_scope(&mut self) {
+        let s = self.scope;
+        let mut to_remove = Vec::new();
+        for (k, vec) in &mut self.vars {
+            vec.retain(|(_, scope)| {
+                assert!(*scope <= s);
+                *scope < s
+            });
+            if vec.is_empty() {
+                to_remove.push(k.clone());
+            }
+        }
+        for t in to_remove {
+            self.vars.remove(&t);
+        }
+        self.scope -= 1;
     }
 }
 
@@ -277,7 +348,7 @@ impl Shell {
 }
 
 pub fn run_program(p: Program, state: &mut State) -> Result<(i32, Context), Box<Error>> {
-    let mut task = Task::new_from_command_lists(p.0);
+    let mut task = Task::new_from_command_lists(p.0, false);
     let mut ctx = Context {
         state,
         in_pipe: false,

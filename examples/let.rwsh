@@ -14,3 +14,21 @@ echo $a $b $c
 let a 1
 let a $(calc $a + 4)
 echo $a
+
+let name tudor
+let | grep name
+{
+	let name andrei
+	let | grep name
+	let -l name alex
+	let | grep name
+	let -e name
+	let | grep name
+}
+let | grep name
+let -x name tudor
+env | grep name
+let | grep name
+let -ex name
+env | grep name
+echo $?

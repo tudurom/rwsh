@@ -67,7 +67,7 @@ impl Switch {
             self.ast
                 .1
                 .iter()
-                .map(|(_, prog)| Task::new_from_command_lists(prog.0.clone())),
+                .map(|(_, prog)| Task::new_from_command_lists(prog.0.clone(), false)),
         );
         self.patterns
             .extend(self.ast.1.iter().map(|(p, _)| word_to_str(p.clone())));

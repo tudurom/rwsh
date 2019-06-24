@@ -34,8 +34,8 @@ impl WhileConstruct {
         WhileConstruct {
             condition,
             body,
-            condition_task: Task::new_from_command_lists(c.0),
-            body_task: Task::new_from_command_lists(b.0),
+            condition_task: Task::new_from_command_lists(c.0, false),
+            body_task: Task::new_from_command_lists(b.0, false),
             last_body_status: Ok(TaskStatus::Wait),
         }
     }
@@ -56,8 +56,8 @@ impl TaskImpl for WhileConstruct {
                 return Ok(TaskStatus::Wait);
             }
             self.last_body_status = Ok(body_status);
-            self.condition_task = Task::new_from_command_lists(self.condition.clone().0);
-            self.body_task = Task::new_from_command_lists(self.body.clone().0);
+            self.condition_task = Task::new_from_command_lists(self.condition.clone().0, false);
+            self.body_task = Task::new_from_command_lists(self.body.clone().0, false);
         }
 
         Ok(TaskStatus::Success(ctx.state.exit))

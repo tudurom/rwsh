@@ -22,13 +22,21 @@ use crate::shell::Context;
 pub struct TaskList {
     pub children: Vec<Task>,
     pub current: usize,
+    pub has_scope: bool,
+
+    started: bool,
+    finished: bool,
 }
 
 impl TaskList {
-    pub fn new() -> TaskList {
+    pub fn new(has_scope: bool) -> TaskList {
         TaskList {
             children: vec![],
             current: 0,
+            has_scope,
+
+            started: false,
+            finished: false,
         }
     }
 }
@@ -38,6 +46,10 @@ impl TaskImpl for TaskList {
         let mut ret = Ok(TaskStatus::Wait);
         if self.children.is_empty() {
             return Ok(TaskStatus::Success(0));
+        }
+        if self.has_scope && !self.started {
+            ctx.state.begin_scope();
+            self.started = true;
         }
         while self.current < self.children.len() {
             let child = &mut self.children[self.current];
@@ -49,6 +61,9 @@ impl TaskImpl for TaskList {
             }
 
             self.current += 1;
+        }
+        if self.has_scope && !self.finished && self.current == self.children.len() {
+            ctx.state.end_scope();
         }
 
         ret

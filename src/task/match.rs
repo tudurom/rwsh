@@ -61,7 +61,7 @@ impl Match {
             .enumerate()
             .map(|(i, (pattern, prog))| {
                 let pattern = word_to_str(pattern.clone());
-                let task = Task::new_from_command_lists(prog.0.clone());
+                let task = Task::new_from_command_lists(prog.0.clone(), false);
                 let regex = Regex::new(&pattern).unwrap();
                 MatchItem {
                     regex,
@@ -120,7 +120,7 @@ impl TaskImpl for Match {
                         return Ok(TaskStatus::Wait);
                     } else {
                         self.last_body_status = Ok(body_status);
-                        item.task = Task::new_from_command_lists(item.prog.0.clone());
+                        item.task = Task::new_from_command_lists(item.prog.0.clone(), false);
                         item.to_exec -= 1;
                     }
                 }
