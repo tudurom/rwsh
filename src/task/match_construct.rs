@@ -38,7 +38,7 @@ struct MatchItem {
     started: bool,
 }
 
-pub struct Match {
+pub struct MatchConstruct {
     ast: Vec<(parser::Word, parser::Program)>,
     reader: Option<BufReader<Stdin>>,
     items: Vec<MatchItem>,
@@ -49,9 +49,9 @@ pub struct Match {
     last_body_status: Result<TaskStatus, String>,
 }
 
-impl Match {
+impl MatchConstruct {
     pub fn new(items: Vec<(parser::Word, parser::Program)>) -> Self {
-        Match {
+        MatchConstruct {
             ast: items,
             items: Vec::new(),
             reader: None,
@@ -94,7 +94,7 @@ impl Match {
     }
 }
 
-impl TaskImpl for Match {
+impl TaskImpl for MatchConstruct {
     fn poll(&mut self, ctx: &mut Context) -> Result<TaskStatus, String> {
         if !self.initialized {
             self.initialize()?;

@@ -18,7 +18,7 @@
 use super::word::word_to_str;
 use super::*;
 use crate::parser;
-use crate::shell::{Context,Var};
+use crate::shell::{Context, Var};
 use regex::{Regex, RegexSet};
 use std::collections::HashMap;
 
@@ -46,7 +46,7 @@ impl ItemIndex {
     }
 }
 
-pub struct Switch {
+pub struct SwitchConstruct {
     ast: (parser::Word, Vec<(parser::Word, parser::Program)>),
     to_match: String,
     items: Vec<Task>,
@@ -59,9 +59,9 @@ pub struct Switch {
     index: ItemIndex,
 }
 
-impl Switch {
+impl SwitchConstruct {
     pub fn new(condition: parser::Word, items: Vec<(parser::Word, parser::Program)>) -> Self {
-        Switch {
+        SwitchConstruct {
             ast: (condition, items),
             to_match: String::new(),
             items: Vec::new(),
@@ -107,7 +107,7 @@ impl Switch {
     }
 }
 
-impl TaskImpl for Switch {
+impl TaskImpl for SwitchConstruct {
     fn poll(&mut self, ctx: &mut Context) -> Result<TaskStatus, String> {
         if !self.initialized {
             self.initialize()?;
@@ -118,12 +118,22 @@ impl TaskImpl for Switch {
                 None => self.index = ItemIndex::None,
                 Some(i) => {
                     let cap = self.regexes[i].captures(&self.to_match).unwrap();
-                    self.index = ItemIndex::Index(ExecContext{
+                    self.index = ItemIndex::Index(ExecContext {
                         index: i,
-                        int_captures: cap.iter().map(|x| x.map_or(String::new(), |val| val.as_str().to_owned())).collect(),
-                        string_captures: self.named_capture_groups[i].iter().map(|name| {
-                            (name.clone(), cap.name(name).map_or(String::new(), |val| val.as_str().to_owned()))
-                        }).collect(),
+                        int_captures: cap
+                            .iter()
+                            .map(|x| x.map_or(String::new(), |val| val.as_str().to_owned()))
+                            .collect(),
+                        string_captures: self.named_capture_groups[i]
+                            .iter()
+                            .map(|name| {
+                                (
+                                    name.clone(),
+                                    cap.name(name)
+                                        .map_or(String::new(), |val| val.as_str().to_owned()),
+                                )
+                            })
+                            .collect(),
                         started: false,
                         finished: false,
                     });
@@ -136,10 +146,12 @@ impl TaskImpl for Switch {
             let cur = self.index.index();
             if !cur.started {
                 for (i, val) in cur.int_captures.iter().enumerate() {
-                    ctx.state.set_var(i.to_string(), Var::String(val.clone()), true);
+                    ctx.state
+                        .set_var(i.to_string(), Var::String(val.clone()), true);
                 }
                 for (name, val) in cur.string_captures.iter() {
-                    ctx.state.set_var(name.clone(), Var::String(val.clone()), true);
+                    ctx.state
+                        .set_var(name.clone(), Var::String(val.clone()), true);
                 }
                 cur.started = true;
             }

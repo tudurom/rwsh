@@ -274,6 +274,8 @@ pub enum Command {
     /// A match construct. It runs code *for each match* of *every pattern* in the text.
     /// The text is given by `stdin`.
     MatchConstruct(Vec<(Word, Program)>),
+    /// A negated expression.
+    NotConstruct(Program),
 }
 
 impl PrettyPrint for Command {
@@ -377,6 +379,10 @@ impl PrettyPrint for Command {
                         ],
                     })
                     .collect(),
+            },
+            Command::NotConstruct(prog) => PrettyTree {
+                text: "!".to_owned(),
+                children: vec![prog.pretty_print()],
             },
         }
     }
@@ -861,6 +867,19 @@ impl Parser {
         self.lexer.borrow_mut().ps2_exit();
         Some(Ok(Command::MatchConstruct(v)))
     }
+
+    fn parse_not(&mut self) -> Option<Result<Command, ParseError>> {
+        self.next_tok().unwrap().unwrap(); // !
+
+        self.skip_space(false);
+        let prog = match self.parse_program(false) {
+            Some(Err(e)) => return Some(Err(e)),
+            Some(Ok(p)) => p,
+            None => Program(Vec::new()),
+        };
+        Some(Ok(Command::NotConstruct(prog)))
+    }
+
     fn parse_command(&mut self) -> Option<Result<Command, ParseError>> {
         self.skip_space(false);
         match self.peek() {
@@ -926,6 +945,7 @@ impl Parser {
                         "while" => return self.parse_while(),
                         "switch" => return self.parse_switch(),
                         "match" => return self.parse_match(),
+                        "!" => return self.parse_not(),
                         _ => {}
                     }
                 }

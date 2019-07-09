@@ -17,19 +17,21 @@
  */
 mod command;
 mod if_construct;
-mod r#match;
+mod match_construct;
+mod not;
 mod pipeline;
 mod sresequence;
-mod switch;
+mod switch_construct;
 mod tasklist;
 mod while_construct;
 mod word;
 pub use command::Command;
 pub use if_construct::{ElseConstruct, IfConstruct};
+pub use match_construct::MatchConstruct;
+pub use not::Not;
 pub use pipeline::Pipeline;
-pub use r#match::Match;
 pub use sresequence::SRESequence;
-pub use switch::Switch;
+pub use switch_construct::SwitchConstruct;
 pub use tasklist::TaskList;
 pub use while_construct::WhileConstruct;
 pub use word::Word;
@@ -187,7 +189,7 @@ impl Task {
                 .push(Self::new_from_word(item.0.clone(), false, true));
         }
         tl.children
-            .push(Task::new(Box::new(Switch::new(to_match, items))));
+            .push(Task::new(Box::new(SwitchConstruct::new(to_match, items))));
 
         Task::new(Box::new(tl))
     }
@@ -198,8 +200,15 @@ impl Task {
             tl.children
                 .push(Self::new_from_word(item.0.clone(), false, true));
         }
-        tl.children.push(Task::new(Box::new(Match::new(items))));
+        tl.children
+            .push(Task::new(Box::new(MatchConstruct::new(items))));
         Task::new(Box::new(tl))
+    }
+
+    pub fn new_from_not(prog: parser::Program) -> Self {
+        Task::new(Box::new(Not::new(Self::new_from_command_lists(
+            prog.0, false,
+        ))))
     }
 
     pub fn new_from_command(pi: parser::Command) -> Self {
@@ -216,6 +225,7 @@ impl Task {
                 Self::new_from_switch(to_match, items)
             }
             parser::Command::MatchConstruct(items) => Self::new_from_match(items),
+            parser::Command::NotConstruct(prog) => Self::new_from_not(prog),
         }
     }
 

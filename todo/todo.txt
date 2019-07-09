@@ -5,4 +5,3 @@ Functions
 Job control
 (C) || and && operators
 execute commands from sre
-(C) ! builtin

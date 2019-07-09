@@ -62,7 +62,12 @@ impl Command {
                         .map(|a| os2c(OsStr::new(&a)))
                         .collect::<Vec<CString>>()
                         .as_slice(),
-                    ctx.state.computed_exported_vars.iter().map(|a| os2c(OsStr::new(&a))).collect::<Vec<CString>>().as_slice(),
+                    ctx.state
+                        .computed_exported_vars
+                        .iter()
+                        .map(|a| os2c(OsStr::new(&a)))
+                        .collect::<Vec<CString>>()
+                        .as_slice(),
                 ) {
                     eprintln!("{}: {}", self.args[0], e);
                     std::process::exit(127);
