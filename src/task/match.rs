@@ -45,7 +45,7 @@ pub struct Match {
 
     initialized: bool,
     finished: bool,
-    buf: Vec<u8>,
+    buf: String,
     last_body_status: Result<TaskStatus, String>,
 }
 
@@ -58,7 +58,7 @@ impl Match {
 
             initialized: false,
             finished: false,
-            buf: Vec::new(),
+            buf: String::new(),
             last_body_status: Ok(TaskStatus::Wait),
         }
     }
@@ -117,9 +117,9 @@ impl TaskImpl for Match {
                         continue;
                     }
                     let len = available.len();
-                    self.buf.extend_from_slice(available);
+                    self.buf.push_str(&String::from_utf8_lossy(available));
                     for item in self.items.iter_mut() {
-                        let s = String::from_utf8_lossy(&self.buf[item.offset..]);
+                        let s = &self.buf[item.offset..];
                         let mut to_add = 0;
                         for m in item.regex.captures_iter(&s) {
                             item.to_exec.push_back(ExecContext {
