@@ -6,3 +6,5 @@ x 2019-06-17 Live matching
 x 2019-06-19 Fix pipes
 x 2019-06-22 parameters in SRE commands
 x 2019-06-24 capture groups in switch and match
+x 2019-07-09 fix #2
+x 2019-07-09 fix #3

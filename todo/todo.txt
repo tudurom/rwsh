@@ -4,7 +4,5 @@ For
 Functions
 Job control
 (C) || and && operators
-(B) fix #2
 execute commands from sre
 (C) ! builtin
-(B) fix #3

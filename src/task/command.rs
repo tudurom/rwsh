@@ -121,7 +121,7 @@ impl Command {
                 }
                 self.args.extend(
                     glob::glob(&original)
-                        .map_err(|e| format!("{}", e))?
+                        .map_err(|e| format!("{} ({})", e, &original))?
                         .filter_map(Result::ok)
                         .map(|p| String::from(p.to_str().unwrap())),
                 );
