@@ -1,2 +1,12 @@
 if (test 3 -eq 3) echo pass
 else echo fail
+
+if (! false) echo a
+
+if (! true) echo b
+else if (! false) echo c
+
+if (true && false) echo nope
+else if (true && ! true) echo ah
+else if (false || true) echo yay
+else echo please

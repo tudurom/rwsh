@@ -218,10 +218,48 @@ impl PrettyPrint for SRESequence {
 /// A chain of [`Command`s](enum.Command.html) piped together
 pub struct Pipeline(pub Vec<Command>);
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum BinOpType {
+    And,
+    Or,
+}
+
 /// A node in a [`CommandList`](struct.CommandList.html).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Node {
     Pipeline(Pipeline),
+    BinOp(BinOpType, Box<Node>, Box<Node>),
+}
+
+impl PrettyPrint for Node {
+    fn pretty_print(&self) -> PrettyTree {
+        match &self {
+            Node::Pipeline(p) => PrettyTree {
+                text: "pipeline".to_owned(),
+                children: p.0.iter().map(|c| c.pretty_print()).collect(),
+            },
+            Node::BinOp(typ, left, right) => {
+                let pretty_left = left.pretty_print();
+                let pretty_right = right.pretty_print();
+                PrettyTree {
+                    text: format!(
+                        "binop {}",
+                        if let BinOpType::And = typ { "&&" } else { "||" }
+                    ),
+                    children: vec![
+                        PrettyTree {
+                            text: format!("left - {}", pretty_left.text),
+                            children: left.pretty_print().children,
+                        },
+                        PrettyTree {
+                            text: format!("right - {}", pretty_right.text),
+                            children: right.pretty_print().children,
+                        },
+                    ],
+                }
+            }
+        }
+    }
 }
 
 /// A command list is a list of commands with binary operators between them.
@@ -230,11 +268,10 @@ pub struct CommandList(pub Node);
 
 impl PrettyPrint for CommandList {
     fn pretty_print(&self) -> PrettyTree {
-        match &self.0 {
-            Node::Pipeline(p) => PrettyTree {
-                text: "command list - pipeline".to_owned(),
-                children: p.0.iter().map(|c| c.pretty_print()).collect(),
-            },
+        let pretty_node = self.0.pretty_print();
+        PrettyTree {
+            text: format!("command list - {}", pretty_node.text),
+            children: pretty_node.children,
         }
     }
 }
@@ -492,9 +529,41 @@ impl Parser {
         }
     }
 
+    fn parse_node(&mut self) -> Option<Result<Node, ParseError>> {
+        let left = match self.parse_pipeline()? {
+            Ok(p) => Node::Pipeline(p),
+            Err(e) => return Some(Err(e)),
+        };
+        self.skip_space(true);
+        let typ = match self.peek() {
+            Some(Ok(Token {
+                kind: lex::TokenKind::And,
+                ..
+            })) => {
+                self.next_tok();
+                BinOpType::And
+            }
+            Some(Ok(Token {
+                kind: lex::TokenKind::Or,
+                ..
+            })) => {
+                self.next_tok();
+                BinOpType::Or
+            }
+            _ => return Some(Ok(left)),
+        };
+        self.skip_space(false);
+        let right = match self.parse_node() {
+            None => return Some(Err(self.new_error("expected an and-or list".to_owned()))),
+            Some(Err(e)) => return Some(Err(e)),
+            Some(Ok(n)) => n,
+        };
+        Some(Ok(Node::BinOp(typ, Box::new(left), Box::new(right))))
+    }
+
     fn parse_command_list(&mut self) -> Option<Result<CommandList, ParseError>> {
-        match self.parse_pipeline() {
-            Some(Ok(p)) => Some(Ok(CommandList(Node::Pipeline(p)))),
+        match self.parse_node() {
+            Some(Ok(n)) => Some(Ok(CommandList(n))),
             Some(Err(e)) => Some(Err(e.clone())),
             None => None,
         }

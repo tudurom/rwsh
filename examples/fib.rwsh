@@ -1,0 +1,13 @@
+let N 10
+
+let output 0
+let prev 1
+
+let i 0
+while ([ $i -lt $N ]) {
+	let temp $output
+	let output $(calc "$output + $prev")
+	let prev $temp
+	let i $(calc $i + 1)
+}
+echo $output

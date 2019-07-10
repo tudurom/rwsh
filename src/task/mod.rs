@@ -15,6 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with RWSH. If not, see <http://www.gnu.org/licenses/>.
  */
+mod binop;
 mod command;
 mod if_construct;
 mod match_construct;
@@ -25,6 +26,7 @@ mod switch_construct;
 mod tasklist;
 mod while_construct;
 mod word;
+pub use binop::BinOp;
 pub use command::Command;
 pub use if_construct::{ElseConstruct, IfConstruct};
 pub use match_construct::MatchConstruct;
@@ -242,9 +244,18 @@ impl Task {
         Self::new(Box::new(tp))
     }
 
+    pub fn new_from_binop(typ: parser::BinOpType, left: parser::Node, right: parser::Node) -> Self {
+        Self::new(Box::new(BinOp::new(
+            typ,
+            Self::new_from_node(left),
+            Self::new_from_node(right),
+        )))
+    }
+
     pub fn new_from_node(n: parser::Node) -> Self {
         match n {
             parser::Node::Pipeline(p) => Self::new_from_pipeline(p),
+            parser::Node::BinOp(typ, left, right) => Self::new_from_binop(typ, *left, *right),
         }
     }
 

@@ -3,5 +3,5 @@ Maps
 For
 Functions
 Job control
-(C) || and && operators
+(B) Fix || and && order
 execute commands from sre
