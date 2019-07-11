@@ -58,11 +58,12 @@ fn main() {
         Shell::new(
             Box::new(FileLineReader::new(File::open(input).unwrap()).unwrap()),
             cfg,
+            false,
         )
         .run();
     } else if unistd::isatty(0).unwrap() {
         Shell::new_interactive(cfg).run();
     } else {
-        Shell::new(Box::new(FileLineReader::new(stdin()).unwrap()), cfg).run();
+        Shell::new(Box::new(FileLineReader::new(stdin()).unwrap()), cfg, false).run();
     }
 }

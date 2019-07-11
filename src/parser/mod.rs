@@ -438,6 +438,13 @@ impl Parser {
         Self::from_lexer(l)
     }
 
+    /// Reset the parser to clean state. Used after encountering an error in interractive mode.
+    pub fn reload(&mut self) {
+        self.error = None;
+        self.brace_group_level = 0;
+        self.lexer.borrow_mut().reload();
+    }
+
     /// Creates a new parser from a [`Lexer`](./lex/struct.Lexer.html).
     pub fn from_lexer(lexer: Lexer) -> Parser {
         Parser {

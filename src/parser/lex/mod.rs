@@ -142,6 +142,16 @@ impl Lexer {
         }
     }
 
+    /// Reset the lexer to clean state. Used after encountering an error in interractive mode.
+    pub fn reload(&mut self) {
+        self.mode = LexMode::empty();
+        self.pipe_follows = false;
+        self.errored = false;
+        self.peeked = None;
+        self.input.ps2_clear();
+        self.input.refresh();
+    }
+
     pub fn peek(&mut self) -> Option<&<Self as Iterator>::Item> {
         if self.peeked.is_none() {
             self.peeked = Some(self.next());

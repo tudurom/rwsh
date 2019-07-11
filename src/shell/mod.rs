@@ -287,21 +287,23 @@ impl<'a> Context<'a> {
 pub struct Shell {
     p: Rc<RefCell<Parser>>,
     state: State,
+    interactive: bool,
 }
 
 impl Shell {
     /// Create a new `Shell` with an [`InteractiveLineReader`](../util/struct.InteractiveLineReader.html).
     pub fn new_interactive(config: Config) -> Shell {
-        Self::new(Box::new(InteractiveLineReader::new()), config)
+        Self::new(Box::new(InteractiveLineReader::new()), config, true)
     }
 
     /// Returns a new `Shell` with the given [`LineReader`](../util/trait.LineReader.html).
-    pub fn new(r: Box<LineReader>, config: Config) -> Shell {
+    pub fn new(r: Box<LineReader>, config: Config, interactive: bool) -> Shell {
         let buf = BufReadChars::new(r);
         let p = Rc::new(RefCell::new(Parser::new(buf)));
         Shell {
             p: p.clone(),
             state: State::new(config, p.clone()),
+            interactive,
         }
     }
 
@@ -336,7 +338,10 @@ impl Shell {
                 }
             } else if let Err(e) = t {
                 eprintln!("{}", e);
-                exit(1);
+                if !self.interactive {
+                    exit(1);
+                }
+                self.p.borrow_mut().reload();
             }
         }
         exit(self.state.exit);

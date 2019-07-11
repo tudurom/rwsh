@@ -77,6 +77,8 @@ pub trait LineReader {
 
     /// Remove the current parsing context from the stack.
     fn ps2_exit(&self) {}
+
+    fn ps2_clear(&self) {}
 }
 
 #[derive(Default)]
@@ -179,6 +181,10 @@ impl LineReader for InteractiveLineReader {
     fn ps2_exit(&self) {
         self.ps2_stack.borrow_mut().pop();
     }
+
+    fn ps2_clear(&self) {
+        self.ps2_stack.borrow_mut().clear();
+    }
 }
 
 /// A char iterator for UTF-8 texts.
@@ -208,7 +214,8 @@ impl BufReadChars {
         }
     }
 
-    fn refresh(&mut self) {
+    /// Reads a new line
+    pub fn refresh(&mut self) {
         match self.r.read_line().unwrap() {
             Some(line) => {
                 self.chars = line.chars().collect();
@@ -260,6 +267,10 @@ impl BufReadChars {
 
     pub fn ps2_exit(&mut self) {
         self.r.ps2_exit();
+    }
+
+    pub fn ps2_clear(&mut self) {
+        self.r.ps2_clear();
     }
 }
 
