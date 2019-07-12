@@ -48,7 +48,6 @@ fn has_command_argument(name: char) -> bool {
     s.binary_search(&name).is_ok()
 }
 
-#[allow(clippy::collapsible_if)]
 fn read_arg(p: &mut Parser) -> Result<Word, ParseError> {
     skip_whitespace(p, true);
     p.parse_word_delimited('/')

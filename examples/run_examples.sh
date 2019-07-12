@@ -14,6 +14,5 @@ for example in *.rwsh; do
     if ! diff "$temp" "${example%.rwsh}.out" > /dev/null; then
         echo "[Wrong] $example"
         diff "$temp" "${example%.rwsh}.out"
-        exit 1
     fi
 done

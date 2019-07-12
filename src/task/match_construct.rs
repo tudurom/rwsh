@@ -101,7 +101,7 @@ impl TaskImpl for MatchConstruct {
         }
         let stdin = stdin();
         while ctx.state.exit == -1 {
-            match self.items.iter_mut().find(|item| item.to_exec.len() > 0) {
+            match self.items.iter_mut().find(|item| !item.to_exec.is_empty()) {
                 None => {
                     if self.finished {
                         return self.last_body_status.clone();

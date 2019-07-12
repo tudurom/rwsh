@@ -31,6 +31,7 @@ fn print_usage(program: &str, opts: Options) {
     eprint!("{}", opts.usage(&brief));
 }
 
+#[allow(clippy::collapsible_if)]
 pub fn r#let(ctx: &mut Context, args: Vec<&str>) -> i32 {
     let mut opts = Options::new();
     opts.optflag("x", "", "export variable");

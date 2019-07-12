@@ -19,7 +19,6 @@
 pub mod sre;
 
 use super::{escape, skip_whitespace};
-use super::{RawWord, Word};
 use crate::util::{BufReadChars, NullReader, ParseError};
 use bitflags::bitflags;
 
@@ -34,7 +33,7 @@ pub enum TokenKind {
     Pizza,
     Newline,
     /// A sequence of concatenated words.
-    Word(Word),
+    Word(String),
     /// Left brace (`{`)
     LBrace,
     /// Right brace (`}`)
@@ -61,9 +60,9 @@ pub enum TokenKind {
 }
 
 impl TokenKind {
-    pub fn word(self) -> Word {
-        if let TokenKind::Word(w) = self {
-            w
+    pub fn word(self) -> String {
+        if let TokenKind::Word(s) = self {
+            s
         } else {
             panic!()
         }
@@ -210,6 +209,26 @@ impl Lexer {
     }
 }
 
+// KEEP SORTED
+static SYMBOLS: &'static [(char, TokenKind)] = &[
+    ('"', TokenKind::DoubleQuote),
+    ('$', TokenKind::Dollar),
+    ('\'', TokenKind::SingleQuote),
+    ('(', TokenKind::LParen),
+    (')', TokenKind::RParen),
+    (';', TokenKind::Semicolon),
+    ('{', TokenKind::LBrace),
+    ('}', TokenKind::RBrace),
+    ('🍕', TokenKind::Pizza),
+];
+
+fn find_symbol(c: char) -> Option<TokenKind> {
+    SYMBOLS
+        .binary_search_by(|probe| probe.0.cmp(&c))
+        .ok()
+        .map(|i| SYMBOLS[i].1.clone())
+}
+
 impl Iterator for Lexer {
     type Item = Result<Token, ParseError>;
 
@@ -270,36 +289,12 @@ impl Iterator for Lexer {
                 } else {
                     Some(Ok(tok!(TokenKind::Ampersand, 1, self.input)))
                 }
-            } else if c == '🍕' {
-                self.input.next();
-                Some(Ok(tok!(TokenKind::Pizza, 1, self.input)))
             } else if c == '\n' {
                 self.input.next();
                 Some(Ok(tok!(TokenKind::Newline, 0, self.input)))
-            } else if c == '{' {
+            } else if let Some(kind) = find_symbol(c) {
                 self.input.next();
-                Some(Ok(tok!(TokenKind::LBrace, 1, self.input)))
-            } else if c == '}' {
-                self.input.next();
-                Some(Ok(tok!(TokenKind::RBrace, 1, self.input)))
-            } else if c == '(' {
-                self.input.next();
-                Some(Ok(tok!(TokenKind::LParen, 1, self.input)))
-            } else if c == ')' {
-                self.input.next();
-                Some(Ok(tok!(TokenKind::RParen, 1, self.input)))
-            } else if c == ';' {
-                self.input.next();
-                Some(Ok(tok!(TokenKind::Semicolon, 1, self.input)))
-            } else if c == '\'' {
-                self.input.next();
-                Some(Ok(tok!(TokenKind::SingleQuote, 1, self.input)))
-            } else if c == '"' {
-                self.input.next();
-                Some(Ok(tok!(TokenKind::DoubleQuote, 1, self.input)))
-            } else if c == '$' {
-                self.input.next();
-                Some(Ok(tok!(TokenKind::Dollar, 1, self.input)))
+                Some(Ok(tok!(kind, 1, self.input)))
             } else if c == '/' && self.mode.contains(LexMode::SLASH) {
                 self.input.next();
                 Some(Ok(tok!(TokenKind::Slash, 1, self.input)))
@@ -312,11 +307,7 @@ impl Iterator for Lexer {
                         if self.mode.contains(LexMode::END) && s == "end" {
                             Some(Ok(tok!(TokenKind::End, 3, self.input)))
                         } else {
-                            Some(Ok(tok!(
-                                TokenKind::Word(RawWord::String(s, false).into()),
-                                s.len(),
-                                self.input
-                            )))
+                            Some(Ok(tok!(TokenKind::Word(s), s.len(), self.input)))
                         }
                     }
                     Err(e) => {
@@ -413,12 +404,7 @@ mod tests {
                 }
             };
         }
-        assert_eq!(
-            lex.next(),
-            Some(Ok(tok!(Word(
-                super::RawWord::String("end".to_owned(), false).into()
-            ))))
-        );
+        assert_eq!(lex.next(), Some(Ok(tok!(Word("end".to_owned())))));
         lex.mode.insert(LexMode::END);
         assert_eq!(lex.next(), Some(Ok(tok!(Space))));
         assert_eq!(lex.next(), Some(Ok(tok!(End))));
@@ -440,20 +426,10 @@ mod tests {
         }
         lex.mode.insert(LexMode::SLASH);
         assert_eq!(lex.next(), Some(Ok(tok!(Slash))));
-        assert_eq!(
-            lex.next(),
-            Some(Ok(tok!(Word(
-                super::RawWord::String("something".to_owned(), false).into()
-            ))))
-        );
+        assert_eq!(lex.next(), Some(Ok(tok!(Word("something".to_owned())))));
         assert_eq!(lex.next(), Some(Ok(tok!(Slash))));
         lex.mode.remove(LexMode::SLASH);
-        assert_eq!(
-            lex.next(),
-            Some(Ok(tok!(Word(
-                super::RawWord::String("/".to_owned(), false).into()
-            ))))
-        );
+        assert_eq!(lex.next(), Some(Ok(tok!(Word("/".to_owned())))));
     }
 
     #[test]
@@ -472,20 +448,14 @@ mod tests {
 
         use super::TokenKind::*;
         let ok: Vec<Result<Token, ParseError>> = vec![
-            Ok(tok!(Word(
-                super::RawWord::String("test".to_owned(), false).into()
-            ))),
+            Ok(tok!(Word("test".to_owned()))),
             Ok(tok!(Space)),
             Ok(tok!(Pipe)),
             Ok(tok!(Space)),
             Ok(tok!(LBrace)),
-            Ok(tok!(Word(
-                super::RawWord::String("cat".to_owned(), false).into()
-            ))),
+            Ok(tok!(Word("cat".to_owned()))),
             Ok(tok!(Newline)),
-            Ok(tok!(Word(
-                super::RawWord::String("meow".to_owned(), false).into()
-            ))),
+            Ok(tok!(Word("meow".to_owned()))),
             Ok(tok!(RBrace)),
             Ok(tok!(LParen)),
             Ok(tok!(RParen)),

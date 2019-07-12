@@ -1010,20 +1010,17 @@ impl Parser {
                 None
             }
             Some(Ok(lex::Token {
-                kind: lex::TokenKind::Word(w),
+                kind: lex::TokenKind::Word(s),
                 ..
             })) => {
-                use std::ops::Deref;
-                if let RawWord::String(s, false) = w.borrow().deref() {
-                    match s.as_ref() {
-                        "if" => return self.parse_if(),
-                        "else" => return self.parse_else(),
-                        "while" => return self.parse_while(),
-                        "switch" => return self.parse_switch(),
-                        "match" => return self.parse_match(),
-                        "!" => return self.parse_not(),
-                        _ => {}
-                    }
+                match s.as_ref() {
+                    "if" => return self.parse_if(),
+                    "else" => return self.parse_else(),
+                    "while" => return self.parse_while(),
+                    "switch" => return self.parse_switch(),
+                    "match" => return self.parse_match(),
+                    "!" => return self.parse_not(),
+                    _ => {}
                 }
                 self.parse_simple_command()
                     .map(|r| r.map(Command::SimpleCommand))
@@ -1111,7 +1108,7 @@ impl Parser {
         while let Some(Ok(lex::Token { kind, .. })) = self.peek() {
             match kind {
                 lex::TokenKind::Word(word) => {
-                    v.push(word);
+                    v.push(RawWord::String(word, false).into());
                     self.next_tok();
                 }
                 lex::TokenKind::SingleQuote => {

@@ -113,7 +113,6 @@ fn scan_address(it: &mut BufReadChars, is_char: bool) -> Token {
     }
 }
 
-#[allow(clippy::collapsible_if)]
 fn scan_regexp(it: &mut BufReadChars, reverse: bool) -> Result<Token, ParseError> {
     let mut s = String::new();
     let delimiter = if reverse { '?' } else { '/' };

@@ -199,7 +199,7 @@ impl State {
         self.vars
             .get(key)
             .map(|vec| vec.last().unwrap().0.to_string())
-            .or(self.exported_vars.get(key).map(|v| v.clone()))
+            .or_else(|| self.exported_vars.get(key).cloned())
     }
 
     pub fn fork(&mut self) -> Result<Fork, Box<Error>> {
