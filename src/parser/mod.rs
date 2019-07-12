@@ -536,40 +536,60 @@ impl Parser {
         }
     }
 
-    fn parse_node(&mut self) -> Option<Result<Node, ParseError>> {
+    fn parse_and(&mut self) -> Option<Result<Node, ParseError>> {
         let left = match self.parse_pipeline()? {
             Ok(p) => Node::Pipeline(p),
             Err(e) => return Some(Err(e)),
         };
         self.skip_space(true);
-        let typ = match self.peek() {
+        match self.peek() {
             Some(Ok(Token {
                 kind: lex::TokenKind::And,
                 ..
-            })) => {
-                self.next_tok();
-                BinOpType::And
-            }
-            Some(Ok(Token {
-                kind: lex::TokenKind::Or,
-                ..
-            })) => {
-                self.next_tok();
-                BinOpType::Or
-            }
+            })) => self.next_tok(),
             _ => return Some(Ok(left)),
         };
         self.skip_space(false);
-        let right = match self.parse_node() {
-            None => return Some(Err(self.new_error("expected an and-or list".to_owned()))),
+        let right = match self.parse_and() {
+            None => return Some(Err(self.new_error("expected an and list".to_owned()))),
             Some(Err(e)) => return Some(Err(e)),
             Some(Ok(n)) => n,
         };
-        Some(Ok(Node::BinOp(typ, Box::new(left), Box::new(right))))
+        Some(Ok(Node::BinOp(
+            BinOpType::And,
+            Box::new(left),
+            Box::new(right),
+        )))
+    }
+
+    fn parse_or(&mut self) -> Option<Result<Node, ParseError>> {
+        let left = match self.parse_and()? {
+            Ok(a) => a,
+            Err(e) => return Some(Err(e)),
+        };
+        self.skip_space(true);
+        match self.peek() {
+            Some(Ok(Token {
+                kind: lex::TokenKind::Or,
+                ..
+            })) => self.next_tok(),
+            _ => return Some(Ok(left)),
+        };
+        self.skip_space(false);
+        let right = match self.parse_or() {
+            None => return Some(Err(self.new_error("expected an or list".to_owned()))),
+            Some(Err(e)) => return Some(Err(e)),
+            Some(Ok(n)) => n,
+        };
+        Some(Ok(Node::BinOp(
+            BinOpType::Or,
+            Box::new(left),
+            Box::new(right),
+        )))
     }
 
     fn parse_command_list(&mut self) -> Option<Result<CommandList, ParseError>> {
-        match self.parse_node() {
+        match self.parse_or() {
             Some(Ok(n)) => Some(Ok(CommandList(n))),
             Some(Err(e)) => Some(Err(e.clone())),
             None => None,

@@ -9,3 +9,4 @@ x 2019-06-24 capture groups in switch and match
 x 2019-07-09 fix #2
 x 2019-07-09 fix #3
 x 2019-07-09 ! builtin
+x 2019-07-12 Fix || and && order
