@@ -124,12 +124,13 @@ impl Command {
                         original.push_str(&glob::Pattern::escape(&word_to_str(word.clone())));
                     }
                 }
-                self.args.extend(
-                    glob::glob(&original)
-                        .map_err(|e| format!("{} ({})", e, &original))?
-                        .filter_map(Result::ok)
-                        .map(|p| String::from(p.to_str().unwrap())),
-                );
+                match glob::glob(&original) {
+                    Err(_) => self.args.push(word_to_str(word_list.clone())),
+                    Ok(g) => self.args.extend(
+                        g.filter_map(Result::ok)
+                            .map(|p| String::from(p.to_str().unwrap())),
+                    ),
+                }
             } else {
                 self.args.push(word_to_str(word_list.clone()));
             }

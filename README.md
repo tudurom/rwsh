@@ -25,7 +25,7 @@ See `todo/todo.txt`.
     - [ ] Shell commands in SRE
 - [ ] Shell stuff:
     - [x] Load scripts
-    - [ ] `||`, `&&`, `!`
+    - [x] `||`, `&&`, `!`
 	- [ ] Redirection
     - [ ] Job control (God have mercy)
         - [ ] Handle signals

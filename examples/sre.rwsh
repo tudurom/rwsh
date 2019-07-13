@@ -7,7 +7,7 @@ This is the last line" |> /an example/+-p
 echo "Apoi capra porneşte înainte plângând, şi lupul după dânsa, prefăcându-se că plânge.
 – Doamne, cumătre, Doamne! zise capra suspinând. De ce ţi-e mai drag în lume, de-aceea n-ai parte…" |> ,x/capra/ c/oaia/ |> ,p
 
-let emacs "This manual is organized in a rather haphazard manner.  The first several
+let emacs = "This manual is organized in a rather haphazard manner.  The first several
 sections were written hastily in an attempt to provide ageneral introduction to the
 
 commands in Emacs and to try to showthe method in the madness that is the Emacs
@@ -21,7 +21,7 @@ echo $emacs |> ,x/Emacs/ {
 	+-p
 }
 
-let bacovia "Copacii albi, copacii negri
+let bacovia = "Copacii albi, copacii negri
 Stau goi în parcul solitar
 Decor de doliu funerar...
 Copacii albi, copacii negri.

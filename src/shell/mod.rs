@@ -35,14 +35,26 @@ pub enum Fork {
 }
 
 #[derive(Clone, Debug)]
-pub enum Var {
-    String(String),
+pub enum VarValue {
+    Array(Vec<String>),
+}
+
+#[derive(Clone, Debug)]
+pub struct Var {
+    key: String,
+    value: VarValue,
+}
+
+impl Var {
+    pub fn new(key: String, value: VarValue) -> Var {
+        Var { key, value }
+    }
 }
 
 impl std::string::ToString for Var {
     fn to_string(&self) -> String {
-        match self {
-            Var::String(s) => s.clone(),
+        match &self.value {
+            VarValue::Array(arr) => arr.join(if self.key.ends_with("PATH") { ":" } else { " " }),
         }
     }
 }
@@ -73,7 +85,15 @@ pub struct State {
 fn read_vars() -> HashMap<String, Var> {
     let mut v = HashMap::new();
     for (key, value) in env::vars() {
-        v.insert(key, Var::String(value));
+        let var = if key.ends_with("PATH") {
+            Var::new(
+                key,
+                VarValue::Array(value.split(':').map(|x| x.to_owned()).collect()),
+            )
+        } else {
+            Var::new(key, VarValue::Array(vec![value]))
+        };
+        v.insert(var.key.clone(), var);
     }
     v
 }
@@ -191,7 +211,11 @@ impl State {
         } else if self.vars.contains_key(key) {
             let v = self.vars.get_mut(key).unwrap();
             assert!(v.last().unwrap().1 <= self.scope);
-            self.set_var(key.to_owned(), Var::String(String::new()), true);
+            self.set_var(
+                key.to_owned(),
+                Var::new(key.to_owned(), VarValue::Array(vec![])),
+                true,
+            );
         }
     }
 

@@ -18,7 +18,7 @@
 use super::word::word_to_str;
 use super::*;
 use crate::parser;
-use crate::shell::{Context, Var};
+use crate::shell::{Context, Var, VarValue};
 use regex::{Regex, RegexSet};
 use std::collections::HashMap;
 
@@ -146,12 +146,18 @@ impl TaskImpl for SwitchConstruct {
             let cur = self.index.index();
             if !cur.started {
                 for (i, val) in cur.int_captures.iter().enumerate() {
-                    ctx.state
-                        .set_var(i.to_string(), Var::String(val.clone()), true);
+                    ctx.state.set_var(
+                        i.to_string(),
+                        Var::new(i.to_string(), VarValue::Array(vec![val.clone()])),
+                        true,
+                    );
                 }
                 for (name, val) in cur.string_captures.iter() {
-                    ctx.state
-                        .set_var(name.clone(), Var::String(val.clone()), true);
+                    ctx.state.set_var(
+                        name.clone(),
+                        Var::new(name.clone(), VarValue::Array(vec![val.clone()])),
+                        true,
+                    );
                 }
                 cur.started = true;
             }

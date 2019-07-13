@@ -18,7 +18,7 @@
 use super::word::word_to_str;
 use super::*;
 use crate::parser;
-use crate::shell::Var;
+use crate::shell::{Var, VarValue};
 use regex::Regex;
 use std::collections::{HashMap, VecDeque};
 use std::io::{stdin, BufRead, BufReader, ErrorKind, Stdin};
@@ -158,8 +158,11 @@ impl TaskImpl for MatchConstruct {
                             .iter()
                             .enumerate()
                         {
-                            ctx.state
-                                .set_var(i.to_string(), Var::String(val.clone()), true);
+                            ctx.state.set_var(
+                                i.to_string(),
+                                Var::new(i.to_string(), VarValue::Array(vec![val.clone()])),
+                                true,
+                            );
                         }
                         for (name, val) in item
                             .to_exec
@@ -169,8 +172,11 @@ impl TaskImpl for MatchConstruct {
                             .string_captures
                             .iter()
                         {
-                            ctx.state
-                                .set_var(name.clone(), Var::String(val.clone()), true);
+                            ctx.state.set_var(
+                                name.clone(),
+                                Var::new(name.clone(), VarValue::Array(vec![val.clone()])),
+                                true,
+                            );
                         }
                         item.started = true;
                     }

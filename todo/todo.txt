@@ -1,7 +1,7 @@
-(C) Arrays
 Maps
 For
 Functions
 Job control
 execute commands from sre
 (C) Fix #4: Broken pipe error when piping out of while or match
+(A) improve let - special equal operators
