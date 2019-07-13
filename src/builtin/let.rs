@@ -11,7 +11,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
  * You should have received a copy of the GNU General Public License
  * along with RWSH. If not, see <http://www.gnu.org/licenses/>.
  */
@@ -29,6 +28,16 @@ fn print_usage(program: &str, opts: Options) {
         program
     );
     eprint!("{}", opts.usage(&brief));
+}
+
+// keep sorted!
+static OPERATORS: &'static [&'static str] = &["%=", "*=", "+=", "-=", "/=", "="];
+
+fn is_operator(s: &str) -> bool {
+    if s.as_bytes()[s.len() - 1] != b'=' {
+        return false;
+    }
+    OPERATORS.binary_search(&s).is_ok()
 }
 
 enum Value<'a> {
@@ -60,7 +69,7 @@ impl<'a> KVReader<'a> {
 
     fn read_keys(&mut self) -> Result<Vec<&'a str>, &'static str> {
         let mut keys: Vec<&'a str> = Vec::new();
-        while self.i < self.args.len() && self.args[self.i] != "=" {
+        while self.i < self.args.len() && !is_operator(&self.args[self.i]) {
             keys.push(&self.args[self.i]);
             self.i += 1;
         }
@@ -70,16 +79,16 @@ impl<'a> KVReader<'a> {
         Ok(keys)
     }
 
-    fn equals_sign(&mut self) -> Result<(), &'static str> {
+    fn operator(&mut self) -> Result<String, &'static str> {
         if self.i == self.args.len() {
             return Err("missing '=' operator");
         }
         self.i += 1;
-        Ok(())
+        Ok(self.args[self.i - 1].to_owned())
     }
 
-    fn read_raw_values(&mut self) -> Result<Vec<&'a str>, &'static str> {
-        self.equals_sign()?;
+    fn read_raw_values(&mut self) -> Result<(String, Vec<&'a str>), &'static str> {
+        let op = self.operator()?;
         let mut vals: Vec<&'a str> = Vec::new();
         while self.i < self.args.len() {
             vals.push(&self.args[self.i]);
@@ -88,11 +97,11 @@ impl<'a> KVReader<'a> {
         if vals.is_empty() {
             return Err("missing values");
         }
-        Ok(vals)
+        Ok((op, vals))
     }
 
-    fn read_values(&mut self) -> Result<Vec<Value<'a>>, &'static str> {
-        let raw = self.read_raw_values()?;
+    fn read_values(&mut self) -> Result<(String, Vec<Value<'a>>), &'static str> {
+        let (op, raw) = self.read_raw_values()?;
         let mut values = Vec::new();
         let mut arr = Vec::new();
         let mut in_array = false;
@@ -114,7 +123,7 @@ impl<'a> KVReader<'a> {
         if in_array {
             return Err("array literal left open");
         }
-        Ok(values)
+        Ok((op, values))
     }
 }
 
@@ -164,19 +173,19 @@ pub fn r#let(ctx: &mut Context, args: Vec<&str>) -> i32 {
         Ok(ks) => ks,
         Err(e) => err!(e),
     };
+    let (op, vals) = match reader.read_values() {
+        Ok(vs) => vs,
+        Err(e) => err!(e),
+    };
+    if keys.len() != vals.len() {
+        err!("number of keys doesn't match the number of values");
+    }
     if matches.opt_present("x") {
         if matches.opt_present("e") {
             for key in keys {
                 ctx.state.unexport_var(key);
             }
         } else {
-            let vals = match reader.read_values() {
-                Ok(vs) => vs,
-                Err(e) => err!(e),
-            };
-            if keys.len() != vals.len() {
-                err!("number of keys doesn't match the number of values");
-            }
             for (key, val) in keys.into_iter().zip(vals.into_iter()) {
                 let val = val.to_var(key.to_owned()).to_string();
                 ctx.state.export_var(key.to_owned(), val);
@@ -188,19 +197,56 @@ pub fn r#let(ctx: &mut Context, args: Vec<&str>) -> i32 {
                 ctx.state.remove_var(key);
             }
         } else {
-            let vals = match reader.read_values() {
-                Ok(vs) => vs,
-                Err(e) => err!(e),
-            };
-            if keys.len() != vals.len() {
-                err!("number of keys doesn't match the number of values");
-            }
             for (key, val) in keys.into_iter().zip(vals.into_iter()) {
-                ctx.state.set_var(
-                    key.to_owned(),
-                    val.to_var(key.to_owned()),
-                    matches.opt_present("l"),
-                );
+                let left = ctx.state.get_var(key);
+                if left.is_none() && op != "=" {
+                    err!(format!("variable '{}' doesn't exist", key));
+                }
+                if op == "=" {
+                    ctx.state.set_var(
+                        key.to_owned(),
+                        val.to_var(key.to_owned()),
+                        matches.opt_present("l"),
+                    );
+                    return 0;
+                }
+                let left = left.unwrap();
+                macro_rules! to_int {
+                    ($expr:expr) => {{
+                        match $expr.parse::<i64>() {
+                            Ok(i) => i,
+                            Err(e) => err!(format!("'{}' is not a number: {}", $expr, e)),
+                        }
+                    }};
+                }
+                let right = match val {
+                    Value::String(s) => match s.parse::<i64>() {
+                        Ok(i) => i,
+                        Err(e) => err!(format!("cannot use string on number: {}", e)),
+                    },
+                    Value::Array(_) => err!("cannot use array on number"),
+                };
+                match left.value {
+                    VarValue::Array(mut left) => {
+                        for v in &mut left {
+                            let mut i = to_int!(v);
+                            match op.as_bytes()[0] {
+                                b'%' => i %= right,
+                                b'*' => i *= right,
+                                b'+' => i += right,
+                                b'-' => i -= right,
+                                b'/' => i /= right,
+                                _ => panic!(),
+                            }
+                            *v = i.to_string();
+                        }
+                        ctx.state.set_var(
+                            key.to_owned(),
+                            Var::new(key.to_owned(), VarValue::Array(left)),
+                            matches.opt_present("l"),
+                        );
+                    }
+                }
             }
         }
     }

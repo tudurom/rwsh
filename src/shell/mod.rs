@@ -41,8 +41,8 @@ pub enum VarValue {
 
 #[derive(Clone, Debug)]
 pub struct Var {
-    key: String,
-    value: VarValue,
+    pub key: String,
+    pub value: VarValue,
 }
 
 impl Var {
@@ -51,11 +51,17 @@ impl Var {
     }
 }
 
-impl std::string::ToString for Var {
-    fn to_string(&self) -> String {
-        match &self.value {
-            VarValue::Array(arr) => arr.join(if self.key.ends_with("PATH") { ":" } else { " " }),
-        }
+impl std::fmt::Display for Var {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match &self.value {
+                VarValue::Array(arr) => {
+                    arr.join(if self.key.ends_with("PATH") { ":" } else { " " })
+                }
+            }
+        )
     }
 }
 
@@ -219,11 +225,16 @@ impl State {
         }
     }
 
-    pub fn get_var(&self, key: &str) -> Option<String> {
+    pub fn get_var(&self, key: &str) -> Option<Var> {
         self.vars
             .get(key)
-            .map(|vec| vec.last().unwrap().0.to_string())
-            .or_else(|| self.exported_vars.get(key).cloned())
+            .map(|vec| vec.last().unwrap().0.clone())
+            .or_else(|| {
+                self.exported_vars
+                    .get(key)
+                    .cloned()
+                    .map(|ex| Var::new(key.to_owned(), VarValue::Array(vec![ex])))
+            })
     }
 
     pub fn fork(&mut self) -> Result<Fork, Box<Error>> {
@@ -300,7 +311,7 @@ impl<'a> Context<'a> {
         match name {
             "" => Some("$".to_owned()),
             "?" => Some(self.state.last_status.to_string()),
-            _ => self.state.get_var(name),
+            _ => self.state.get_var(name).map(|v| v.to_string()),
         }
     }
 }
