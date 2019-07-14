@@ -6,8 +6,8 @@ let prev = 1
 let i = 0
 while ([ $i -lt $N ]) {
 	let temp = $output
-	let output = $(calc "$output + $prev")
+	let output += $prev
 	let prev = $temp
-	let i = $(calc $i + 1)
+	let i += 1
 }
 echo $output

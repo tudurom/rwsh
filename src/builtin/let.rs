@@ -30,14 +30,57 @@ fn print_usage(program: &str, opts: Options) {
     eprint!("{}", opts.usage(&brief));
 }
 
-// keep sorted!
-static OPERATORS: &'static [&'static str] = &["%=", "*=", "+=", "-=", "/=", "="];
+#[derive(Copy, Clone)]
+enum OperatorType {
+    None,
+    Arithmetic,
+    Array,
+}
 
-fn is_operator(s: &str) -> bool {
+#[derive(Copy, Clone)]
+struct Operator {
+    op: &'static str,
+    typ: OperatorType,
+}
+
+macro_rules! op {
+    ($op:expr, m) => {
+        Operator {
+            op: $op,
+            typ: OperatorType::Arithmetic,
+        }
+    };
+    ($op:expr, a) => {
+        Operator {
+            op: $op,
+            typ: OperatorType::Array,
+        }
+    };
+}
+
+// keep sorted!
+static OPERATORS: &'static [Operator] = &[
+    op!("%=", m),
+    op!("*=", m),
+    op!("++=", a),
+    op!("+=", m),
+    op!("-=", m),
+    op!("/=", m),
+    op!("::=", a),
+    Operator {
+        op: "=",
+        typ: OperatorType::None,
+    },
+];
+
+fn get_operator(s: &str) -> Option<Operator> {
     if s.as_bytes()[s.len() - 1] != b'=' {
-        return false;
+        return None;
     }
-    OPERATORS.binary_search(&s).is_ok()
+    OPERATORS
+        .binary_search_by(|probe| probe.op.cmp(&s))
+        .ok()
+        .map(|i| OPERATORS[i])
 }
 
 enum Value<'a> {
@@ -60,16 +103,25 @@ impl<'a> Value<'a> {
 struct KVReader<'a> {
     i: usize,
     args: &'a [String],
+    op: Option<Operator>,
 }
 
 impl<'a> KVReader<'a> {
     fn new(args: &'a [String]) -> KVReader {
-        KVReader { i: 1, args }
+        KVReader {
+            i: 1,
+            args,
+            op: None,
+        }
     }
 
     fn read_keys(&mut self) -> Result<Vec<&'a str>, &'static str> {
         let mut keys: Vec<&'a str> = Vec::new();
-        while self.i < self.args.len() && !is_operator(&self.args[self.i]) {
+        while self.i < self.args.len() {
+            if let Some(op) = get_operator(&self.args[self.i]) {
+                self.op = Some(op);
+                break;
+            }
             keys.push(&self.args[self.i]);
             self.i += 1;
         }
@@ -79,15 +131,15 @@ impl<'a> KVReader<'a> {
         Ok(keys)
     }
 
-    fn operator(&mut self) -> Result<String, &'static str> {
+    fn operator(&mut self) -> Result<Operator, &'static str> {
         if self.i == self.args.len() {
             return Err("missing '=' operator");
         }
         self.i += 1;
-        Ok(self.args[self.i - 1].to_owned())
+        Ok(self.op.unwrap().clone())
     }
 
-    fn read_raw_values(&mut self) -> Result<(String, Vec<&'a str>), &'static str> {
+    fn read_raw_values(&mut self) -> Result<(Operator, Vec<&'a str>), &'static str> {
         let op = self.operator()?;
         let mut vals: Vec<&'a str> = Vec::new();
         while self.i < self.args.len() {
@@ -100,7 +152,7 @@ impl<'a> KVReader<'a> {
         Ok((op, vals))
     }
 
-    fn read_values(&mut self) -> Result<(String, Vec<Value<'a>>), &'static str> {
+    fn read_values(&mut self) -> Result<(Operator, Vec<Value<'a>>), &'static str> {
         let (op, raw) = self.read_raw_values()?;
         let mut values = Vec::new();
         let mut arr = Vec::new();
@@ -173,13 +225,25 @@ pub fn r#let(ctx: &mut Context, args: Vec<&str>) -> i32 {
         Ok(ks) => ks,
         Err(e) => err!(e),
     };
-    let (op, vals) = match reader.read_values() {
-        Ok(vs) => vs,
-        Err(e) => err!(e),
+    let (op, vals) = if !matches.opt_present("e") {
+        match reader.read_values() {
+            Ok(vs) => {
+                if keys.len() != vs.1.len() {
+                    err!("number of keys doesn't match the number of values");
+                }
+                vs
+            }
+            Err(e) => err!(e),
+        }
+    } else {
+        (
+            Operator {
+                op: "",
+                typ: OperatorType::None,
+            },
+            vec![],
+        )
     };
-    if keys.len() != vals.len() {
-        err!("number of keys doesn't match the number of values");
-    }
     if matches.opt_present("x") {
         if matches.opt_present("e") {
             for key in keys {
@@ -199,52 +263,86 @@ pub fn r#let(ctx: &mut Context, args: Vec<&str>) -> i32 {
         } else {
             for (key, val) in keys.into_iter().zip(vals.into_iter()) {
                 let left = ctx.state.get_var(key);
-                if left.is_none() && op != "=" {
+                if left.is_none() && op.op != "=" {
                     err!(format!("variable '{}' doesn't exist", key));
                 }
-                if op == "=" {
+                if op.op == "=" {
                     ctx.state.set_var(
                         key.to_owned(),
                         val.to_var(key.to_owned()),
                         matches.opt_present("l"),
                     );
-                    return 0;
+                    continue;
                 }
-                let left = left.unwrap();
-                macro_rules! to_int {
-                    ($expr:expr) => {{
-                        match $expr.parse::<i64>() {
-                            Ok(i) => i,
-                            Err(e) => err!(format!("'{}' is not a number: {}", $expr, e)),
+                match op.typ {
+                    OperatorType::None => {}
+                    OperatorType::Arithmetic => {
+                        let left = left.unwrap();
+                        macro_rules! to_int {
+                            ($expr:expr) => {{
+                                match $expr.parse::<i64>() {
+                                    Ok(i) => i,
+                                    Err(e) => err!(format!("'{}' is not a number: {}", $expr, e)),
+                                }
+                            }};
                         }
-                    }};
-                }
-                let right = match val {
-                    Value::String(s) => match s.parse::<i64>() {
-                        Ok(i) => i,
-                        Err(e) => err!(format!("cannot use string on number: {}", e)),
-                    },
-                    Value::Array(_) => err!("cannot use array on number"),
-                };
-                match left.value {
-                    VarValue::Array(mut left) => {
-                        for v in &mut left {
-                            let mut i = to_int!(v);
-                            match op.as_bytes()[0] {
-                                b'%' => i %= right,
-                                b'*' => i *= right,
-                                b'+' => i += right,
-                                b'-' => i -= right,
-                                b'/' => i /= right,
-                                _ => panic!(),
+                        let right = match val {
+                            Value::String(s) => match s.parse::<i64>() {
+                                Ok(i) => i,
+                                Err(e) => err!(format!("cannot use string on number: {}", e)),
+                            },
+                            Value::Array(_) => err!("cannot use array on number"),
+                        };
+                        match left.value {
+                            VarValue::Array(mut left) => {
+                                for v in &mut left {
+                                    let mut i = to_int!(v);
+                                    match op.op.as_bytes()[0] {
+                                        b'%' => i %= right,
+                                        b'*' => i *= right,
+                                        b'+' => i += right,
+                                        b'-' => i -= right,
+                                        b'/' => i /= right,
+                                        _ => panic!(),
+                                    }
+                                    *v = i.to_string();
+                                }
+                                ctx.state.set_var(
+                                    key.to_owned(),
+                                    Var::new(key.to_owned(), VarValue::Array(left)),
+                                    matches.opt_present("l"),
+                                );
                             }
-                            *v = i.to_string();
                         }
-                        ctx.state.set_var(
-                            key.to_owned(),
-                            Var::new(key.to_owned(), VarValue::Array(left)),
-                            matches.opt_present("l"),
-                        );
+                    }
+                    OperatorType::Array => {
+                        let left = left.unwrap();
+                        let mut right = match val {
+                            Value::String(s) => vec![s],
+                            Value::Array(arr) => arr,
+                        }
+                        .into_iter()
+                        .map(|s| s.to_owned())
+                        .collect::<Vec<_>>();
+                        match left.value {
+                            VarValue::Array(mut left) => {
+                                match &op.op[..=1] {
+                                    "++" => left.append(&mut right),
+                                    "::" => {
+                                        let mut old_left = left.clone();
+                                        left.clear();
+                                        left.append(&mut right);
+                                        left.append(&mut old_left);
+                                    }
+                                    _ => panic!(),
+                                }
+                                ctx.state.set_var(
+                                    key.to_owned(),
+                                    Var::new(key.to_owned(), VarValue::Array(left)),
+                                    matches.opt_present("l"),
+                                );
+                            }
+                        }
                     }
                 }
             }

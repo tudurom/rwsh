@@ -12,7 +12,7 @@ let c = "cinci șase"
 echo $a $b $c
 
 let a = 1
-let a = $(calc $a + 4)
+let a += 4
 echo $a
 
 let name = tudor

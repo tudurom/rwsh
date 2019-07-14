@@ -4,7 +4,6 @@ Functions
 Job control
 execute commands from sre
 Fix #4: Broken pipe error when piping out of while or match
-(B) let operators for append and prepend
 (B) make let handle its own glob expansion (and disable glob for it)
 (C) expand arrays as arguments
 (C) access and set individual array elements
