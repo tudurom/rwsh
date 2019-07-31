@@ -126,10 +126,17 @@ impl Command {
                 }
                 match glob::glob(&original) {
                     Err(_) => self.args.push(word_to_str(word_list.clone())),
-                    Ok(g) => self.args.extend(
-                        g.filter_map(Result::ok)
-                            .map(|p| String::from(p.to_str().unwrap())),
-                    ),
+                    Ok(g) => {
+                        let mut iter = g
+                            .filter_map(Result::ok)
+                            .map(|p| String::from(p.to_str().unwrap()))
+                            .peekable();
+                        if iter.peek().is_none() {
+                            self.args.push(word_to_str(word_list.clone()))
+                        } else {
+                            self.args.extend(iter)
+                        }
+                    }
                 }
             } else {
                 self.args.push(word_to_str(word_list.clone()));

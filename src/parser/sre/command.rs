@@ -212,10 +212,7 @@ mod tests {
                     RawWord::List(
                         vec![
                             RawWord::String("xd  &".to_owned(), false).into(),
-                            RawWord::Parameter(WordParameter {
-                                name: "\n".to_owned()
-                            })
-                            .into(),
+                            RawWord::Parameter(WordParameter::var("\n".to_owned())).into(),
                             RawWord::String("#@/xd".to_owned(), false).into(),
                         ],
                         true

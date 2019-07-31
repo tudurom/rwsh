@@ -23,6 +23,8 @@ pub mod sre;
 use self::lex::{LexMode, Lexer, Token};
 use crate::shell::pretty::*;
 use crate::util::{BufReadChars, ParseError};
+use lazy_static::lazy_static;
+use regex::Regex;
 use result::ResultOptionExt;
 use sre::{parse_command as parse_sre_command, Command as SRECommand};
 use std::cell::RefCell;
@@ -92,10 +94,37 @@ pub fn escape(c: char) -> char {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
+pub enum WordParameterBracket {
+    None,
+    Index(usize),
+}
+
 /// An entity to be substituted in a string. Always starts with the dollar sign (`$`).
 #[derive(Clone, PartialEq, Debug)]
 pub struct WordParameter {
     pub name: String,
+    pub bracket: WordParameterBracket,
+}
+
+impl WordParameter {
+    pub fn var(name: String) -> WordParameter {
+        WordParameter {
+            name,
+            bracket: WordParameterBracket::None,
+        }
+    }
+
+    pub fn with_index(name: String, index: usize) -> WordParameter {
+        WordParameter {
+            name,
+            bracket: WordParameterBracket::Index(index),
+        }
+    }
+
+    pub fn to_word(self) -> Word {
+        RawWord::Parameter(self).into()
+    }
 }
 
 /// A reference-counted string that can be substituted in-place.
@@ -124,6 +153,16 @@ pub enum RawWord {
 
     /// A regex pattern.
     Pattern(Vec<Word>),
+}
+
+impl RawWord {
+    fn string(self) -> String {
+        if let RawWord::String(s, _) = self {
+            s
+        } else {
+            panic!("not a string")
+        }
+    }
 }
 
 impl Into<Word> for RawWord {
@@ -1297,35 +1336,38 @@ impl Parser {
         }
     }
 
+    pub fn get_word_parameter(s: &str) -> Option<WordParameter> {
+        lazy_static! {
+            static ref RE: Regex =
+                Regex::new(r"^(?P<name>[^\[\]]+)(\[(?P<index>\d+)\])?$").unwrap();
+        }
+        let caps = RE.captures(s)?;
+        let name = caps.name("name").unwrap().as_str().to_owned();
+        if let Some(index) = caps.name("index") {
+            Some(WordParameter::with_index(
+                name,
+                index.as_str().parse().unwrap(),
+            ))
+        } else {
+            Some(WordParameter::var(name))
+        }
+    }
+
     fn parse_word_parameter(&mut self) -> Result<Word, ParseError> {
         #[allow(clippy::single_match)]
         match self.peek_char() {
             Some('?') => {
                 self.next_char();
-                return Ok(RawWord::Parameter(WordParameter {
-                    name: "?".to_owned(),
-                })
-                .into());
+                return Ok(WordParameter::var("?".to_owned()).to_word());
             }
             _ => {}
         }
         let (w, len) = self.parse_word_string(WordStringReadMode::Parameter)?;
         if len == 0 {
-            Ok(RawWord::Parameter(WordParameter {
-                name: "".to_owned(),
-            })
-            .into())
-        } else {
-            use std::ops::Deref;
-            if let RawWord::String(name, _) = w.borrow().deref() {
-                Ok(RawWord::Parameter(WordParameter {
-                    name: name.to_string(),
-                })
-                .into())
-            } else {
-                panic!()
-            }
+            return Ok(WordParameter::var("".to_owned()).to_word());
         }
+        let s = naked_word(w).string();
+        Ok(Self::get_word_parameter(&s).unwrap().to_word())
     }
 
     fn parse_word_command(&mut self) -> Result<Word, ParseError> {
@@ -1443,9 +1485,9 @@ pub mod tests {
                             "Hello, my name is ".to_owned(),
                             false
                         ))),
-                        Rc::new(RefCell::new(RawWord::Parameter(WordParameter {
-                            name: "NAME".to_owned()
-                        }))),
+                        Rc::new(RefCell::new(RawWord::Parameter(WordParameter::var(
+                            "NAME".to_owned()
+                        )))),
                         Rc::new(RefCell::new(RawWord::String("!".to_owned(), false)))
                     ],
                     true
@@ -1492,10 +1534,7 @@ pub mod tests {
         p.lexer.borrow_mut().next();
         assert_eq!(
             p.parse_word_parameter().unwrap(),
-            super::RawWord::Parameter(super::WordParameter {
-                name: "PARAM".to_owned()
-            })
-            .into(),
+            super::RawWord::Parameter(super::WordParameter::var("PARAM".to_owned())).into(),
         );
     }
 

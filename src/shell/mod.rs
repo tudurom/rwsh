@@ -307,11 +307,17 @@ pub struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
-    pub fn get_parameter_value(&self, name: &str) -> Option<String> {
+    pub fn get_parameter_value(&self, name: &str) -> Option<Var> {
         match name {
-            "" => Some("$".to_owned()),
-            "?" => Some(self.state.last_status.to_string()),
-            _ => self.state.get_var(name).map(|v| v.to_string()),
+            "" => Some(Var::new(
+                "".to_owned(),
+                VarValue::Array(vec!["$".to_owned()]),
+            )),
+            "?" => Some(Var::new(
+                "?".to_owned(),
+                VarValue::Array(vec![self.state.last_status.to_string()]),
+            )),
+            _ => self.state.get_var(name),
         }
     }
 }
