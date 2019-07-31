@@ -17,7 +17,7 @@
  */
 use super::*;
 use crate::parser;
-use crate::shell::{self, Context, Process, VarValue};
+use crate::shell::{self, Context, Key, Process};
 use nix::unistd;
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
@@ -150,16 +150,12 @@ impl TaskImpl for Word {
         use crate::parser::WordParameterBracket;
         match self.word.borrow().deref() {
             parser::RawWord::Parameter(param) => {
-                let val = ctx.get_parameter_value(&param.name);
+                let val = ctx.get_parameter_value(match param.bracket {
+                    WordParameterBracket::None => Key::Var(&param.name),
+                    WordParameterBracket::Index(index) => Key::Index(&param.name, index),
+                });
                 let mut s = match val {
-                    Some(val) => match param.bracket {
-                        WordParameterBracket::None => format!("{}", val),
-                        WordParameterBracket::Index(index) => match val.value {
-                            VarValue::Array(arr) => {
-                                arr.get(index).cloned().unwrap_or(String::new())
-                            }
-                        },
-                    },
+                    Some(val) => format!("{}", val),
                     None => String::new(),
                 };
                 if self.is_pattern {

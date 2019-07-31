@@ -13,3 +13,4 @@ x 2019-07-12 Fix || and && order
 x 2019-07-13 Arrays
 x 2019-07-13 improve let - special equal operators
 x 2019-07-14 let operators for append and prepend
+x 2019-07-31 set individual array elements

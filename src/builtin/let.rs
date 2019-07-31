@@ -15,7 +15,7 @@
  * along with RWSH. If not, see <http://www.gnu.org/licenses/>.
  */
 use crate::shell::Context;
-use crate::shell::{Var, VarValue};
+use crate::shell::{Key, Var, VarValue};
 use getopts::Options;
 
 fn is_special_var(s: &str) -> bool {
@@ -115,14 +115,14 @@ impl<'a> KVReader<'a> {
         }
     }
 
-    fn read_keys(&mut self) -> Result<Vec<&'a str>, &'static str> {
-        let mut keys: Vec<&'a str> = Vec::new();
+    fn read_keys(&mut self) -> Result<Vec<Key<'a>>, &'static str> {
+        let mut keys = Vec::new();
         while self.i < self.args.len() {
             if let Some(op) = get_operator(&self.args[self.i]) {
                 self.op = Some(op);
                 break;
             }
-            keys.push(&self.args[self.i]);
+            keys.push(Key::new(&self.args[self.i]));
             self.i += 1;
         }
         if keys.is_empty() {
@@ -136,7 +136,7 @@ impl<'a> KVReader<'a> {
             return Err("missing '=' operator");
         }
         self.i += 1;
-        Ok(self.op.unwrap().clone())
+        Ok(self.op.unwrap())
     }
 
     fn read_raw_values(&mut self) -> Result<(Operator, Vec<&'a str>), &'static str> {
@@ -209,7 +209,7 @@ pub fn r#let(ctx: &mut Context, args: Vec<&str>) -> i32 {
             }
         } else {
             for k in ctx.state.vars.keys() {
-                println!("{}={}", k, ctx.state.get_var(k).unwrap());
+                println!("{}={}", k, ctx.state.get_var(Key::Var(k)).unwrap());
             }
         }
         return 0;
@@ -247,10 +247,18 @@ pub fn r#let(ctx: &mut Context, args: Vec<&str>) -> i32 {
     if matches.opt_present("x") {
         if matches.opt_present("e") {
             for key in keys {
+                let key = match key {
+                    Key::Var(name) => name,
+                    Key::Index(_, _) => err!("can only erase whole vars"),
+                };
                 ctx.state.unexport_var(key);
             }
         } else {
             for (key, val) in keys.into_iter().zip(vals.into_iter()) {
+                let key = match key {
+                    Key::Var(name) => name,
+                    Key::Index(_, _) => err!("can only use whole vars"),
+                };
                 let val = val.to_var(key.to_owned()).to_string();
                 ctx.state.export_var(key.to_owned(), val);
             }
@@ -258,6 +266,10 @@ pub fn r#let(ctx: &mut Context, args: Vec<&str>) -> i32 {
     } else {
         if matches.opt_present("e") {
             for key in keys {
+                let key = match key {
+                    Key::Var(name) => name,
+                    Key::Index(_, _) => err!("can only use whole vars"),
+                };
                 ctx.state.remove_var(key);
             }
         } else {
@@ -268,8 +280,8 @@ pub fn r#let(ctx: &mut Context, args: Vec<&str>) -> i32 {
                 }
                 if op.op == "=" {
                     ctx.state.set_var(
-                        key.to_owned(),
-                        val.to_var(key.to_owned()),
+                        key,
+                        val.to_var(key.name().to_owned()),
                         matches.opt_present("l"),
                     );
                     continue;
@@ -308,8 +320,8 @@ pub fn r#let(ctx: &mut Context, args: Vec<&str>) -> i32 {
                                     *v = i.to_string();
                                 }
                                 ctx.state.set_var(
-                                    key.to_owned(),
-                                    Var::new(key.to_owned(), VarValue::Array(left)),
+                                    key,
+                                    Var::new(key.name().to_owned(), VarValue::Array(left)),
                                     matches.opt_present("l"),
                                 );
                             }
@@ -337,8 +349,8 @@ pub fn r#let(ctx: &mut Context, args: Vec<&str>) -> i32 {
                                     _ => panic!(),
                                 }
                                 ctx.state.set_var(
-                                    key.to_owned(),
-                                    Var::new(key.to_owned(), VarValue::Array(left)),
+                                    key,
+                                    Var::new(key.name().to_owned(), VarValue::Array(left)),
                                     matches.opt_present("l"),
                                 );
                             }

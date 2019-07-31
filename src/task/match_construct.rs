@@ -18,7 +18,7 @@
 use super::word::word_to_str;
 use super::*;
 use crate::parser;
-use crate::shell::{Var, VarValue};
+use crate::shell::{Key, Var, VarValue};
 use regex::Regex;
 use std::collections::{HashMap, VecDeque};
 use std::io::{stdin, BufRead, BufReader, ErrorKind, Stdin};
@@ -159,7 +159,7 @@ impl TaskImpl for MatchConstruct {
                             .enumerate()
                         {
                             ctx.state.set_var(
-                                i.to_string(),
+                                Key::Var(&i.to_string()),
                                 Var::new(i.to_string(), VarValue::Array(vec![val.clone()])),
                                 true,
                             );
@@ -173,7 +173,7 @@ impl TaskImpl for MatchConstruct {
                             .iter()
                         {
                             ctx.state.set_var(
-                                name.clone(),
+                                Key::Var(name),
                                 Var::new(name.clone(), VarValue::Array(vec![val.clone()])),
                                 true,
                             );

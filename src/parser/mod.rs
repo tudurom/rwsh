@@ -94,36 +94,53 @@ pub fn escape(c: char) -> char {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum WordParameterBracket {
     None,
     Index(usize),
 }
 
 /// An entity to be substituted in a string. Always starts with the dollar sign (`$`).
-#[derive(Clone, PartialEq, Debug)]
-pub struct WordParameter {
+#[derive(PartialEq, Debug)]
+pub struct WordParameter<'a> {
+    pub name: &'a str,
+    pub bracket: WordParameterBracket,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct OwnedWordParameter {
     pub name: String,
     pub bracket: WordParameterBracket,
 }
 
-impl WordParameter {
-    pub fn var(name: String) -> WordParameter {
+impl<'a> WordParameter<'a> {
+    pub fn var(name: &'a str) -> WordParameter<'a> {
         WordParameter {
             name,
             bracket: WordParameterBracket::None,
         }
     }
 
-    pub fn with_index(name: String, index: usize) -> WordParameter {
+    pub fn with_index(name: &'a str, index: usize) -> WordParameter {
         WordParameter {
             name,
             bracket: WordParameterBracket::Index(index),
         }
     }
 
-    pub fn to_word(self) -> Word {
-        RawWord::Parameter(self).into()
+    pub fn into_word(self) -> Word {
+        RawWord::Parameter(OwnedWordParameter {
+            name: self.name.to_owned(),
+            bracket: self.bracket,
+        })
+        .into()
+    }
+
+    pub fn to_owned(&self) -> OwnedWordParameter {
+        OwnedWordParameter {
+            name: self.name.to_owned(),
+            bracket: self.bracket,
+        }
     }
 }
 
@@ -143,7 +160,7 @@ pub enum RawWord {
 
     /// A parameter expansion expression, such as
     /// `$VAR` or `${VAR}`.
-    Parameter(WordParameter),
+    Parameter(OwnedWordParameter),
 
     /// An unqoted or double-quoted list of words.
     List(Vec<Word>, bool),
@@ -1342,14 +1359,14 @@ impl Parser {
                 Regex::new(r"^(?P<name>[^\[\]]+)(\[(?P<index>\d+)\])?$").unwrap();
         }
         let caps = RE.captures(s)?;
-        let name = caps.name("name").unwrap().as_str().to_owned();
+        let name = caps.name("name").unwrap().as_str();
         if let Some(index) = caps.name("index") {
             Some(WordParameter::with_index(
-                name,
+                &name,
                 index.as_str().parse().unwrap(),
             ))
         } else {
-            Some(WordParameter::var(name))
+            Some(WordParameter::var(&name))
         }
     }
 
@@ -1358,16 +1375,16 @@ impl Parser {
         match self.peek_char() {
             Some('?') => {
                 self.next_char();
-                return Ok(WordParameter::var("?".to_owned()).to_word());
+                return Ok(WordParameter::var("?").into_word());
             }
             _ => {}
         }
         let (w, len) = self.parse_word_string(WordStringReadMode::Parameter)?;
         if len == 0 {
-            return Ok(WordParameter::var("".to_owned()).to_word());
+            return Ok(WordParameter::var("").into_word());
         }
         let s = naked_word(w).string();
-        Ok(Self::get_word_parameter(&s).unwrap().to_word())
+        Ok(Self::get_word_parameter(&s).unwrap().into_word())
     }
 
     fn parse_word_command(&mut self) -> Result<Word, ParseError> {
@@ -1485,9 +1502,9 @@ pub mod tests {
                             "Hello, my name is ".to_owned(),
                             false
                         ))),
-                        Rc::new(RefCell::new(RawWord::Parameter(WordParameter::var(
-                            "NAME".to_owned()
-                        )))),
+                        Rc::new(RefCell::new(RawWord::Parameter(
+                            WordParameter::var("NAME").to_owned()
+                        ))),
                         Rc::new(RefCell::new(RawWord::String("!".to_owned(), false)))
                     ],
                     true
@@ -1534,7 +1551,7 @@ pub mod tests {
         p.lexer.borrow_mut().next();
         assert_eq!(
             p.parse_word_parameter().unwrap(),
-            super::RawWord::Parameter(super::WordParameter::var("PARAM".to_owned())).into(),
+            super::RawWord::Parameter(super::WordParameter::var("PARAM").to_owned()).into(),
         );
     }
 

@@ -4,7 +4,5 @@ Functions
 Job control
 execute commands from sre
 Fix #4: Broken pipe error when piping out of while or match
-
 (C) expand arrays as arguments
-(A) set individual array elements
 Complete docs

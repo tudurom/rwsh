@@ -17,7 +17,7 @@
  */
 pub mod pretty;
 
-use crate::parser::{Parser, Program};
+use crate::parser::{Parser, Program, WordParameterBracket};
 use crate::task::{Task, TaskStatus};
 use crate::util::{BufReadChars, InteractiveLineReader, LineReader};
 use nix::sys::wait::WaitStatus;
@@ -37,6 +37,14 @@ pub enum Fork {
 #[derive(Clone, Debug)]
 pub enum VarValue {
     Array(Vec<String>),
+}
+
+impl VarValue {
+    pub fn array(&self) -> &Vec<String> {
+        match self {
+            VarValue::Array(arr) => arr,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -69,6 +77,38 @@ impl std::fmt::Display for Var {
 /// The config options of the shell.
 pub struct Config {
     pub pretty_print: bool,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum Key<'a> {
+    Var(&'a str),
+    Index(&'a str, usize),
+}
+
+impl<'a> Key<'a> {
+    pub fn name(&self) -> &str {
+        match self {
+            Key::Var(name) => name,
+            Key::Index(name, _) => name,
+        }
+    }
+
+    pub fn new(s: &'a str) -> Key<'a> {
+        let param = Parser::get_word_parameter(s).unwrap();
+        match param.bracket {
+            WordParameterBracket::None => Key::Var(&param.name),
+            WordParameterBracket::Index(index) => Key::Index(&param.name, index),
+        }
+    }
+}
+
+impl<'a> std::fmt::Display for Key<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Key::Var(name) => write!(f, "{}", name),
+            Key::Index(name, index) => write!(f, "{}[{}]", name, index),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -189,22 +229,40 @@ impl State {
     /// of the current scope, the variable's value will be set to `value`.
     /// If `create_new` is `true` and the variable already exists in the scope, it will not be created again either.
     /// Only its value will change.
-    pub fn set_var(&mut self, key: String, value: Var, mut create_new: bool) {
-        if !self.vars.contains_key(&key) {
-            self.vars.insert(key.clone(), Vec::new());
+    pub fn set_var(&mut self, key: Key, mut value: Var, mut create_new: bool) {
+        if !self.vars.contains_key(key.name()) {
+            self.vars.insert(key.name().to_owned(), Vec::new());
         }
-        let v = self.vars.get_mut(&key).unwrap();
+        let v = self.vars.get_mut(key.name()).unwrap();
 
         create_new = create_new || v.is_empty();
         // don't put variables with the same scope on the stack
         if !v.is_empty() && v.last().unwrap().1 == self.scope {
             create_new = false;
         }
-        if create_new {
-            v.push((value, self.scope));
+        let current = if create_new {
+            Var::new(key.name().to_owned(), VarValue::Array(vec![]))
         } else {
-            let scope = v.last().unwrap().1;
-            *v.last_mut().unwrap() = (value, scope);
+            v.last().unwrap().clone().0
+        };
+        match current.value {
+            VarValue::Array(arr) => {
+                if let Key::Index(_, index) = key {
+                    let mut new_value = arr.clone();
+                    if index >= new_value.len() {
+                        new_value.resize(index + 1, String::new());
+                    }
+                    new_value[index] = value.value.array().get(0).cloned().unwrap_or_default();
+
+                    value = Var::new(key.name().to_owned(), VarValue::Array(new_value))
+                };
+                if create_new {
+                    v.push((value, self.scope));
+                } else {
+                    let scope = v.last().unwrap().1;
+                    *v.last_mut().unwrap() = (value, scope);
+                }
+            }
         }
     }
 
@@ -218,23 +276,32 @@ impl State {
             let v = self.vars.get_mut(key).unwrap();
             assert!(v.last().unwrap().1 <= self.scope);
             self.set_var(
-                key.to_owned(),
+                Key::Var(key),
                 Var::new(key.to_owned(), VarValue::Array(vec![])),
                 true,
             );
         }
     }
 
-    pub fn get_var(&self, key: &str) -> Option<Var> {
-        self.vars
-            .get(key)
-            .map(|vec| vec.last().unwrap().0.clone())
-            .or_else(|| {
+    pub fn get_var(&self, key: Key) -> Option<Var> {
+        let name = key.name();
+        let var = self.vars.get(name).map(|vec| vec.last().unwrap().0.clone());
+        match key {
+            Key::Var(_) => var.or_else(|| {
                 self.exported_vars
-                    .get(key)
+                    .get(name)
                     .cloned()
-                    .map(|ex| Var::new(key.to_owned(), VarValue::Array(vec![ex])))
-            })
+                    .map(|ex| Var::new(name.to_owned(), VarValue::Array(vec![ex])))
+            }),
+            Key::Index(_, index) => match var {
+                Some(var) => match var.value {
+                    VarValue::Array(arr) => arr.get(index).cloned().map(|el| {
+                        Var::new(format!("{}[{}]", name, index), VarValue::Array(vec![el]))
+                    }),
+                },
+                None => None,
+            },
+        }
     }
 
     pub fn fork(&mut self) -> Result<Fork, Box<Error>> {
@@ -307,8 +374,8 @@ pub struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
-    pub fn get_parameter_value(&self, name: &str) -> Option<Var> {
-        match name {
+    pub fn get_parameter_value(&self, key: Key) -> Option<Var> {
+        match key.name() {
             "" => Some(Var::new(
                 "".to_owned(),
                 VarValue::Array(vec!["$".to_owned()]),
@@ -317,7 +384,7 @@ impl<'a> Context<'a> {
                 "?".to_owned(),
                 VarValue::Array(vec![self.state.last_status.to_string()]),
             )),
-            _ => self.state.get_var(name),
+            _ => self.state.get_var(key),
         }
     }
 }

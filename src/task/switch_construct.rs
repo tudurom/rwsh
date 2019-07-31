@@ -18,7 +18,7 @@
 use super::word::word_to_str;
 use super::*;
 use crate::parser;
-use crate::shell::{Context, Var, VarValue};
+use crate::shell::{Context, Key, Var, VarValue};
 use regex::{Regex, RegexSet};
 use std::collections::HashMap;
 
@@ -147,14 +147,14 @@ impl TaskImpl for SwitchConstruct {
             if !cur.started {
                 for (i, val) in cur.int_captures.iter().enumerate() {
                     ctx.state.set_var(
-                        i.to_string(),
+                        Key::Var(&i.to_string()),
                         Var::new(i.to_string(), VarValue::Array(vec![val.clone()])),
                         true,
                     );
                 }
                 for (name, val) in cur.string_captures.iter() {
                     ctx.state.set_var(
-                        name.clone(),
+                        Key::Var(name),
                         Var::new(name.clone(), VarValue::Array(vec![val.clone()])),
                         true,
                     );
