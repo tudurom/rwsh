@@ -140,8 +140,9 @@ impl TaskImpl for Word {
         let mut program = None;
         let mut to_replace = None;
         use std::ops::DerefMut;
-        if let parser::RawWord::String(ref mut s, _) = self.word.borrow_mut().deref_mut() {
-            if self.expand_tilde {
+        if let parser::RawWord::String(ref mut s, dont_expand) = self.word.borrow_mut().deref_mut()
+        {
+            if !*dont_expand && self.expand_tilde {
                 expand_tilde(s)?;
             }
             return Ok(TaskStatus::Success(0));
@@ -157,7 +158,7 @@ impl TaskImpl for Word {
                 if self.is_pattern {
                     s = regex::escape(&s);
                 }
-                to_replace = Some(parser::RawWord::String(s, false));
+                to_replace = Some(parser::RawWord::String(s, true));
             }
             parser::RawWord::Command(prog) => {
                 program = Some(prog.clone());
@@ -187,7 +188,7 @@ impl TaskImpl for Word {
                 if self.is_pattern {
                     s = regex::escape(&s);
                 }
-                *self.word.borrow_mut() = parser::RawWord::String(s, false);
+                *self.word.borrow_mut() = parser::RawWord::String(s, true);
             }
 
             return self.process.as_mut().unwrap().borrow_mut().poll();
