@@ -34,7 +34,7 @@ pub enum Fork {
     Parent(Rc<RefCell<Process>>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum VarValue {
     Array(Vec<String>),
 }
@@ -47,7 +47,7 @@ impl VarValue {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Var {
     pub key: String,
     pub value: VarValue,
@@ -56,6 +56,13 @@ pub struct Var {
 impl Var {
     pub fn new(key: String, value: VarValue) -> Var {
         Var { key, value }
+    }
+
+    pub fn empty(key: String) -> Var {
+        Var {
+            key,
+            value: VarValue::Array(Vec::new()),
+        }
     }
 }
 

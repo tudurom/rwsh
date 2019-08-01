@@ -107,6 +107,12 @@ impl Command {
             } else {
                 panic!();
             };
+            if words.len() == 1 {
+                if let parser::RawWord::Expansion(var) = words[0].borrow().deref() {
+                    self.args.extend(var.value.array().iter().cloned());
+                    continue;
+                }
+            }
             let mut should_glob = false;
             for word in &words {
                 if let parser::RawWord::String(s, false) = word.borrow().deref() {

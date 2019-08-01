@@ -13,7 +13,8 @@ regex = "1"
 dirs = "2"
 getopts = "0.2"
 libc = "0.2"
-rustyline = "5.0.0"
+# hotfix for reading escaping characters when terminal is not a tty (cargo run)
+rustyline = { git = "https://github.com/kkawakam/rustyline", rev = "fb4ef20" }
 result = "1.0.0"
 calculate = { git = "https://github.com/redox-os/calc" }
 glob = "0.3.0"

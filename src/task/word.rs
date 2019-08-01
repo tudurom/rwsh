@@ -17,7 +17,7 @@
  */
 use super::*;
 use crate::parser;
-use crate::shell::{self, Context, Key, Process};
+use crate::shell::{self, Context, Key, Process, Var};
 use nix::unistd;
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
@@ -154,14 +154,19 @@ impl TaskImpl for Word {
                     WordParameterBracket::None => Key::Var(&param.name),
                     WordParameterBracket::Index(index) => Key::Index(&param.name, index),
                 });
-                let mut s = match val {
-                    Some(val) => format!("{}", val),
-                    None => String::new(),
-                };
                 if self.is_pattern {
-                    s = regex::escape(&s);
+                    let s = match val {
+                        Some(val) => regex::escape(&val.to_string()),
+                        None => String::new(),
+                    };
+                    to_replace = Some(parser::RawWord::String(s, true));
+                } else {
+                    let v = match val {
+                        Some(val) => val,
+                        None => Var::empty(param.name.clone()),
+                    };
+                    to_replace = Some(parser::RawWord::Expansion(v));
                 }
-                to_replace = Some(parser::RawWord::String(s, true));
             }
             parser::RawWord::Command(prog) => {
                 program = Some(prog.clone());
@@ -211,6 +216,7 @@ pub fn word_to_str(w: parser::Word) -> String {
             }
             s
         }
+        parser::RawWord::Expansion(var) => var.to_string(),
         _ => panic!(),
     }
 }

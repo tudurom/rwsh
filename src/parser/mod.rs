@@ -22,6 +22,7 @@ pub mod sre;
 
 use self::lex::{LexMode, Lexer, Token};
 use crate::shell::pretty::*;
+use crate::shell::Var;
 use crate::util::{BufReadChars, ParseError};
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -170,6 +171,9 @@ pub enum RawWord {
 
     /// A regex pattern.
     Pattern(Vec<Word>),
+
+    /// The result of an array expansion
+    Expansion(Var),
 }
 
 impl RawWord {
@@ -198,6 +202,7 @@ pub fn deep_clone_word(w: &Word) -> Word {
         RawWord::List(ws, b) => RawWord::List(ws.iter().map(deep_clone_word).collect(), *b),
         RawWord::Command(prog) => RawWord::Command(prog.clone()),
         RawWord::Pattern(s) => RawWord::Pattern(s.clone()),
+        RawWord::Expansion(var) => RawWord::Expansion(var.clone()),
     }
     .into()
 }
@@ -238,6 +243,7 @@ impl PrettyPrint for RawWord {
                     .map(|w| naked_word(w.clone()).pretty_print())
                     .collect(),
             },
+            RawWord::Expansion(_) => panic!(), // should never reach
         }
     }
 }
@@ -1249,6 +1255,8 @@ impl Parser {
                     }
                     input.next();
                     continue;
+                } else if let WordStringReadMode::Parameter = mode {
+                    break;
                 } else {
                     escaping = true;
                 }
