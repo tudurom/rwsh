@@ -19,6 +19,7 @@ use super::word::word_to_str;
 use super::*;
 use crate::parser;
 use crate::shell::{Key, Var, VarValue};
+use crate::util::regex;
 use regex::Regex;
 use std::collections::{HashMap, VecDeque};
 use std::io::{stdin, BufRead, BufReader, ErrorKind, Stdin};
@@ -71,7 +72,7 @@ impl MatchConstruct {
             .map(|(i, (pattern, prog))| {
                 let pattern = word_to_str(pattern.clone());
                 let task = Task::new_from_command_lists(prog.0.clone(), false);
-                let regex = Regex::new(&pattern).unwrap();
+                let regex = regex(&pattern).unwrap();
                 let named_capture_groups = regex
                     .capture_names()
                     .filter(|v| v.is_some())
