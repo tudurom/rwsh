@@ -21,12 +21,14 @@ mod calc;
 mod cd;
 mod eval;
 mod exit;
+mod len;
 mod r#let;
 mod r#true;
 use self::calc::calc;
 use cd::cd;
 use eval::eval;
 use exit::exit;
+use len::len;
 use r#let::r#let;
 use r#true::{r#false, r#true};
 
@@ -51,7 +53,7 @@ macro_rules! b {
         }
     };
 }
-static BULTINS: [Builtin; 7] = [
+static BUILTINS: &'static [Builtin] = &[
     // keep sorted pls
     b!(calc),
     b!(cd),
@@ -61,6 +63,7 @@ static BULTINS: [Builtin; 7] = [
         name: "false",
         func: r#false,
     },
+    b!(len),
     Builtin {
         name: "let",
         func: r#let,
@@ -73,8 +76,8 @@ static BULTINS: [Builtin; 7] = [
 
 /// Find a built-in function by name.
 pub fn get_builtin(name: &str) -> Option<Builtin> {
-    BULTINS
+    BUILTINS
         .binary_search_by(|b| b.name.cmp(name))
         .ok()
-        .map(|i| BULTINS[i])
+        .map(|i| BUILTINS[i])
 }
